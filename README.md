@@ -15,8 +15,6 @@ This project is a full-featured management system tailored for jewelry businesse
 
 ---
 
-## 📁 Project Structure
-
 ## Cloning the Repository
 
 To use this project, first clone the repository and pull the latest changes:
