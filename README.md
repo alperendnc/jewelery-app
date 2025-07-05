@@ -1,24 +1,21 @@
-# To-Do List Application
+# Jeweler Application – Inventory, Sales & Finance Management
 
-This project is a comprehensive and stylish To-Do List application designed to help you manage your tasks, notes, and schedule effectively. Developed using React, it offers a range of features to enhance productivity and organization.
+This project is a full-featured management system tailored for jewelry businesses. It includes inventory tracking, sales recording, customer management, stock updates, reporting, and finance tracking – all built using **React**, **TypeScript**, **Firebase**, and **Material UI**.
 
 ## Features
 
-- **Task Management:** Easily add, edit, complete, and delete tasks to stay organized and on top of your to-do list.
-- **Notes Management:** Quickly add, edit, delete, and search notes with the ability to mark favorites for easy access.
-- **Calendar Integration:** A dedicated calendar page to view and manage tasks by date, making it easier to track and plan your schedule. Tasks can also be added directly from the calendar.
-- **User Authentication:** Sign up and log in with different accounts to personalize your experience and securely manage your data.
-- **Responsive Design:** Fully responsive design ensures a seamless experience on both mobile and desktop devices.
+- **💍 Product Management** – Add, edit, update, and delete products with details like gram, price, and stock.
+- **🧾 Sales Tracking** – Record customer sales, calculate totals, and manage transactions.
+- **👥 Customer Management** – Register and manage customer details including debts, credits, and contact information.
+- **📦 Stock Page** – View and manage current product stock levels.
+- **📈 Reporting Page** – Generate reports on sales, stock, and customers (future feature).
+- **💸 Finance Tracking** – Track income and expenses with support for different payment methods and summaries.
+- **🔐 Firebase Integration** – All data is synced with Firestore in real-time.
+- **📱 Responsive UI** – Clean and mobile-friendly design using Material UI components.
 
-## Project Structure
+---
 
-- **`App.tsx`:** The main component of the application. Manages routing and global providers.
-- **`TodoList.tsx`:** The component that manages the task list and task-related actions.
-- **`NotesPage/page.tsx`:** The page for managing notes with features like adding, editing, and favoriting notes.
-- **`CalendarPage/page.tsx`:** The page for calendar-related functionalities, including adding tasks directly from the calendar.
-- **`Navbar` and `Sidebar`:** Navigation components for the application.
-- **`MaterialUIComponents.tsx`:** Centralized file for importing Material-UI components.
-- **`themes/index.tsx`:** Theme configuration for Material-UI.
+## 📁 Project Structure
 
 ## Cloning the Repository
 
@@ -30,7 +27,7 @@ To use this project, first clone the repository and pull the latest changes:
    ```
 2. Navigate to the project directory:
    ```bash
-   cd todo-list
+   cd jewelery-app
    ```
 3. Pull the latest changes:
    ```bash
@@ -43,7 +40,7 @@ To run this project locally, follow these steps:
 
 1. Navigate to the project directory:
    ```bash
-   cd todo-list
+   cd jewelery-app
    ```
 2. Install dependencies using Yarn:
 
