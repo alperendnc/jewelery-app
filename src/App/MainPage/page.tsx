@@ -72,7 +72,6 @@ const MainPage = () => {
     <Box
       sx={{
         minHeight: "100vh",
-        background: "linear-gradient(135deg, #fffbe6 0%, #f0e6ff 100%)",
         py: { xs: 2, sm: 4, md: 6 },
         overflowX: "auto",
         display: "flex",

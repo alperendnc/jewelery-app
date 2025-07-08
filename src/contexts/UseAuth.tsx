@@ -1,4 +1,10 @@
-import React, { useContext, createContext, ReactNode } from "react";
+import React, {
+  useContext,
+  createContext,
+  ReactNode,
+  useEffect,
+  useState,
+} from "react";
 import {
   collection,
   doc,
@@ -6,10 +12,17 @@ import {
   getDocs,
   deleteDoc,
   addDoc,
+  onSnapshot,
 } from "firebase/firestore";
-import { db } from "../config";
+import { db, auth } from "../config";
+import {
+  createUserWithEmailAndPassword,
+  signInWithEmailAndPassword,
+  signOut,
+  onAuthStateChanged,
+  User,
+} from "firebase/auth";
 
-// Veri Tipleri
 export interface Product {
   id?: string;
   name: string;
@@ -39,6 +52,7 @@ export interface Sale {
   quantity: number;
   total: number;
   date: string;
+  customer?: Omit<Customer, "id" | "createdAt">;
 }
 
 export interface Transaction {
@@ -50,15 +64,12 @@ export interface Transaction {
   method: "Nakit" | "Kredi Kartı" | "Post";
 }
 
-// Context Tipi
 interface AuthContextType {
-  // Product
   addProduct: (product: Omit<Product, "id" | "createdAt">) => Promise<void>;
   getProducts: () => Promise<Product[]>;
   updateProduct: (id: string, updatedFields: Partial<Product>) => Promise<void>;
   deleteProduct: (id: string) => Promise<void>;
 
-  // Customer
   addCustomer: (customer: Omit<Customer, "id" | "createdAt">) => Promise<void>;
   getCustomers: () => Promise<Customer[]>;
   updateCustomer: (
@@ -66,12 +77,11 @@ interface AuthContextType {
     updatedFields: Partial<Customer>
   ) => Promise<void>;
   deleteCustomer: (id: string) => Promise<void>;
+  listenCustomers: (callback: (customers: Customer[]) => void) => () => void;
 
-  // Sale
   addSale: (sale: Omit<Sale, "id">) => Promise<void>;
   getSales: () => Promise<Sale[]>;
 
-  // Transaction
   addTransaction: (transaction: Omit<Transaction, "id">) => Promise<void>;
   getTransactions: () => Promise<Transaction[]>;
   updateTransaction: (
@@ -79,6 +89,12 @@ interface AuthContextType {
     updatedFields: Partial<Transaction>
   ) => Promise<void>;
   deleteTransaction: (id: string) => Promise<void>;
+
+  currentUser: User | null;
+  signUp: (email: string, password: string) => Promise<User>;
+  login: (email: string, password: string) => Promise<User>;
+  logout: () => Promise<void>;
+  loading: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -88,7 +104,29 @@ interface AuthProviderProps {
 }
 
 export function AuthProvider({ children }: AuthProviderProps) {
-  // Product İşlemleri
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  const signUp = (email: string, password: string) =>
+    createUserWithEmailAndPassword(auth, email, password).then(
+      (userCredential) => userCredential.user
+    );
+
+  const login = (email: string, password: string) =>
+    signInWithEmailAndPassword(auth, email, password).then(
+      (userCredential) => userCredential.user
+    );
+
+  const logout = () => signOut(auth);
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      setCurrentUser(user);
+      setLoading(false);
+    });
+    return unsubscribe;
+  }, []);
+
   const addProduct = async (product: Omit<Product, "id" | "createdAt">) => {
     await addDoc(collection(db, "products"), {
       ...product,
@@ -113,7 +151,6 @@ export function AuthProvider({ children }: AuthProviderProps) {
     await deleteDoc(doc(db, "products", id));
   };
 
-  // Customer İşlemleri
   const addCustomer = async (customer: Omit<Customer, "id" | "createdAt">) => {
     await addDoc(collection(db, "customers"), {
       ...customer,
@@ -141,9 +178,34 @@ export function AuthProvider({ children }: AuthProviderProps) {
     await deleteDoc(doc(db, "customers", id));
   };
 
-  // Sale İşlemleri
+  const listenCustomers = (callback: (customers: Customer[]) => void) => {
+    const q = collection(db, "customers");
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const data = snapshot.docs.map((doc) => ({
+        ...(doc.data() as Customer),
+        id: doc.id,
+      }));
+      callback(data);
+    });
+    return unsubscribe;
+  };
+
   const addSale = async (sale: Omit<Sale, "id">) => {
     await addDoc(collection(db, "sales"), sale);
+    if (sale.customer) {
+      const snapshot = await getDocs(collection(db, "customers"));
+      const exists = snapshot.docs.some(
+        (doc) => doc.data().tc === sale.customer?.tc
+      );
+
+      if (!exists) {
+        await addDoc(collection(db, "customers"), {
+          ...sale.customer,
+          soldItem: sale.productName,
+          createdAt: new Date(),
+        });
+      }
+    }
   };
 
   const getSales = async (): Promise<Sale[]> => {
@@ -154,7 +216,6 @@ export function AuthProvider({ children }: AuthProviderProps) {
     }));
   };
 
-  // Transaction İşlemleri
   const addTransaction = async (transaction: Omit<Transaction, "id">) => {
     await addDoc(collection(db, "transactions"), transaction);
   };
@@ -190,15 +251,21 @@ export function AuthProvider({ children }: AuthProviderProps) {
         getCustomers,
         updateCustomer,
         deleteCustomer,
+        listenCustomers,
         addSale,
         getSales,
         addTransaction,
         getTransactions,
         updateTransaction,
         deleteTransaction,
+        currentUser,
+        signUp,
+        login,
+        logout,
+        loading,
       }}
     >
-      {children}
+      {!loading && children}
     </AuthContext.Provider>
   );
 }

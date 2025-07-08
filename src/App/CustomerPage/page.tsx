@@ -24,7 +24,7 @@ import { useAuth } from "src/contexts/UseAuth";
 import { useSnackbar } from "notistack";
 
 const CustomerPage = () => {
-  const { addCustomer, getCustomers, updateCustomer, deleteCustomer } =
+  const { addCustomer, updateCustomer, deleteCustomer, listenCustomers } =
     useAuth();
   const { enqueueSnackbar } = useSnackbar();
 
@@ -33,7 +33,7 @@ const CustomerPage = () => {
     name: "",
     tc: "",
     phone: "",
-    address: "",
+    soldItem: "",
   });
 
   const [editId, setEditId] = useState<string | null>(null);
@@ -41,27 +41,27 @@ const CustomerPage = () => {
     name: "",
     tc: "",
     phone: "",
-    address: "",
+    soldItem: "",
   });
 
   const [deleteId, setDeleteId] = useState<string | null>(null);
 
   useEffect(() => {
-    fetchCustomers();
+    const unsubscribe = listenCustomers((data) => setCustomers(data));
+    return () => unsubscribe();
   }, []);
-
-  const fetchCustomers = async () => {
-    const data = await getCustomers();
-    setCustomers(data);
-  };
 
   const handleAdd = async () => {
     if (!newCustomer.name || !newCustomer.tc) return;
     try {
       await addCustomer(newCustomer);
       enqueueSnackbar("Müşteri eklendi", { variant: "success" });
-      setNewCustomer({ name: "", tc: "", phone: "", address: "" });
-      fetchCustomers();
+      setNewCustomer({
+        name: "",
+        tc: "",
+        phone: "",
+        soldItem: "",
+      });
     } catch {
       enqueueSnackbar("Müşteri eklenemedi", { variant: "error" });
     }
@@ -71,7 +71,6 @@ const CustomerPage = () => {
     await deleteCustomer(id);
     enqueueSnackbar("Müşteri silindi", { variant: "info" });
     setDeleteId(null);
-    fetchCustomers();
   };
 
   const handleEdit = (customer: any) => {
@@ -80,7 +79,7 @@ const CustomerPage = () => {
       name: customer.name,
       tc: customer.tc,
       phone: customer.phone,
-      address: customer.address,
+      soldItem: customer.soldItem || "",
     });
   };
 
@@ -90,8 +89,12 @@ const CustomerPage = () => {
       await updateCustomer(editId, editCustomer);
       enqueueSnackbar("Müşteri güncellendi", { variant: "success" });
       setEditId(null);
-      setEditCustomer({ name: "", tc: "", phone: "", address: "" });
-      fetchCustomers();
+      setEditCustomer({
+        name: "",
+        tc: "",
+        phone: "",
+        soldItem: "",
+      });
     } catch {
       enqueueSnackbar("Güncelleme başarısız", { variant: "error" });
     }
@@ -143,9 +146,9 @@ const CustomerPage = () => {
           <Grid>
             <TextField
               label="Ne Almış"
-              value={newCustomer.address}
+              value={newCustomer.soldItem}
               onChange={(e) =>
-                setNewCustomer({ ...newCustomer, address: e.target.value })
+                setNewCustomer({ ...newCustomer, soldItem: e.target.value })
               }
               fullWidth
             />
@@ -227,20 +230,21 @@ const CustomerPage = () => {
                       customer.phone
                     )}
                   </TableCell>
+
                   <TableCell>
                     {editId === customer.id ? (
                       <TextField
-                        value={editCustomer.address}
+                        value={editCustomer.soldItem}
                         onChange={(e) =>
                           setEditCustomer({
                             ...editCustomer,
-                            address: e.target.value,
+                            soldItem: e.target.value,
                           })
                         }
                         size="small"
                       />
                     ) : (
-                      customer.address
+                      customer.soldItem || "-"
                     )}
                   </TableCell>
                   <TableCell align="center">

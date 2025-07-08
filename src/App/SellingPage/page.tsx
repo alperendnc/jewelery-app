@@ -54,6 +54,12 @@ function SellingPage() {
       quantity: parseFloat(gram),
       total: parseFloat(total),
       date: new Date().toISOString().slice(0, 10),
+      customer: {
+        name: customerName,
+        tc: customerTC,
+        phone: "",
+        soldItem: product,
+      },
     });
     enqueueSnackbar("Satış başarıyla kaydedildi!", { variant: "success" });
   };
@@ -67,6 +73,12 @@ function SellingPage() {
       quantity: parseFloat(buyGram),
       total: parseFloat(buyTotal),
       date: new Date().toISOString().slice(0, 10),
+      customer: {
+        name: buyCustomerName,
+        tc: buyCustomerTC,
+        phone: "",
+        soldItem: buyProduct,
+      },
     });
     enqueueSnackbar("Alış başarıyla kaydedildi!", { variant: "success" });
   };
