@@ -56,7 +56,7 @@ const ReportingPage = () => {
       setPurchaseReports(await getPurchases());
     }
     fetchData();
-  }, []);
+  }, [getProducts, getSales, getPurchases]);
 
   const profitReports = React.useMemo(() => {
     const monthlyData: Record<string, { satis: number; maliyet: number }> = {};

@@ -53,7 +53,7 @@ const CustomerPage = () => {
   useEffect(() => {
     const unsubscribe = listenCustomers((data) => setCustomers(data));
     return () => unsubscribe();
-  }, []);
+  }, [listenCustomers]);
 
   const handleAdd = async () => {
     if (!newCustomer.name || !newCustomer.tc) return;
