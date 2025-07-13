@@ -10,7 +10,8 @@ jobs:
     runs-on: macos-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout Repository
+        uses: actions/checkout@v4
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -26,7 +27,7 @@ jobs:
           yarn install
 
       - name: Install Tauri CLI
-        run: yarn global add @tauri-apps/cli
+        run: yarn add -D @tauri-apps/cli
 
       - name: Build Tauri app
         run: yarn tauri build
@@ -35,4 +36,4 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: macOS-app
-          path: src-tauri/target/release/bundle
+          path: src-tauri/target/release/bundle/
