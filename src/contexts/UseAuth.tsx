@@ -31,6 +31,15 @@ export interface Product {
   stock: number;
   createdAt?: Date;
 }
+export interface Purchase {
+  id: string;
+  supplierName: string;
+  productName: string;
+  quantity: number;
+  total: number;
+  paid: number;
+  date: string;
+}
 
 export interface Customer {
   id?: string;
@@ -81,6 +90,11 @@ interface AuthContextType {
 
   addSale: (sale: Omit<Sale, "id">) => Promise<void>;
   getSales: () => Promise<Sale[]>;
+
+  getPurchases: () => Promise<Purchase[]>;
+  updatePurchase: (id: string, data: Omit<Purchase, "id">) => Promise<void>;
+  deletePurchase: (id: string) => Promise<void>;
+  addPurchases: (purchase: Omit<Purchase, "id">) => Promise<void>;
 
   addTransaction: (transaction: Omit<Transaction, "id">) => Promise<void>;
   getTransactions: () => Promise<Transaction[]>;
@@ -240,6 +254,27 @@ export function AuthProvider({ children }: AuthProviderProps) {
     await deleteDoc(doc(db, "transactions", id));
   };
 
+  const getPurchases = async (): Promise<Purchase[]> => {
+    const snapshot = await getDocs(collection(db, "purchases"));
+    return snapshot.docs.map(
+      (doc) => ({ id: doc.id, ...doc.data() } as Purchase)
+    );
+  };
+  const updatePurchase = async (id: string, data: Omit<Purchase, "id">) => {
+    const docRef = doc(db, "purchases", id);
+    await setDoc(docRef, data);
+  };
+  const deletePurchase = async (id: string) => {
+    await deleteDoc(doc(db, "purchases", id));
+  };
+
+  const addPurchases = async (purchase: Omit<Purchase, "id">) => {
+    await addDoc(collection(db, "purchases"), {
+      ...purchase,
+      date: new Date().toISOString(),
+    });
+  };
+
   return (
     <AuthContext.Provider
       value={{
@@ -263,6 +298,10 @@ export function AuthProvider({ children }: AuthProviderProps) {
         login,
         logout,
         loading,
+        addPurchases,
+        getPurchases,
+        updatePurchase,
+        deletePurchase,
       }}
     >
       {!loading && children}
