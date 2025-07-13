@@ -9,7 +9,7 @@ import {
   Snackbar,
   Alert,
 } from "@mui/material";
-import { useNavigate, Link } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import LoginIcon from "@mui/icons-material/Login";
 
 export default function Login() {
@@ -25,6 +25,8 @@ export default function Login() {
     "success"
   );
 
+  const [showWelcomeMessage, setShowWelcomeMessage] = useState(false); // 👈 yeni eklendi
+
   const showSnackbar = (message: string, severity: "success" | "error") => {
     setSnackbarMessage(message);
     setSnackbarSeverity(severity);
@@ -35,6 +37,7 @@ export default function Login() {
     e.preventDefault();
     try {
       await login(email, password);
+      setShowWelcomeMessage(true); // 👈 başarı sonrası göster
       showSnackbar("Giriş başarılı!", "success");
       setTimeout(() => navigate("/"), 1500);
     } catch (err) {
@@ -56,6 +59,17 @@ export default function Login() {
             color: "#000",
           }}
         >
+          {showWelcomeMessage && (
+            <Typography
+              variant="h5"
+              color="success.main"
+              textAlign="center"
+              mb={2}
+            >
+              Hoş geldiniz!
+            </Typography>
+          )}
+
           <Typography variant="h4" gutterBottom fontWeight={600}>
             Tekrar Hoş Geldiniz
           </Typography>
@@ -104,20 +118,6 @@ export default function Login() {
               Giriş Yap
             </Button>
           </form>
-
-          <Typography variant="body2" mt={3}>
-            Hesabınız yok mu?{" "}
-            <Link
-              to="/signup"
-              style={{
-                textDecoration: "none",
-                color: "#1976d2",
-                fontWeight: 500,
-              }}
-            >
-              Kayıt Ol
-            </Link>
-          </Typography>
         </Box>
       </Container>
 

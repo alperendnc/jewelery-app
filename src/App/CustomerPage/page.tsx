@@ -17,9 +17,12 @@ import {
   DialogTitle,
   DialogContent,
   DialogActions,
+  Collapse,
 } from "@mui/material";
 import EditIcon from "@mui/icons-material/Edit";
 import DeleteIcon from "@mui/icons-material/Delete";
+import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
+import ExpandLessIcon from "@mui/icons-material/ExpandLess";
 import { useAuth } from "src/contexts/UseAuth";
 import { useSnackbar } from "notistack";
 
@@ -45,6 +48,7 @@ const CustomerPage = () => {
   });
 
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [expandedName, setExpandedName] = useState<string | null>(null);
 
   useEffect(() => {
     const unsubscribe = listenCustomers((data) => setCustomers(data));
@@ -100,12 +104,26 @@ const CustomerPage = () => {
     }
   };
 
+  const groupByName = (data: any[]) => {
+    const groups: { [key: string]: any[] } = {};
+    data.forEach((item) => {
+      if (!groups[item.name]) {
+        groups[item.name] = [];
+      }
+      groups[item.name].push(item);
+    });
+    return groups;
+  };
+
+  const groupedCustomers = groupByName(customers);
+
   return (
     <Box sx={{ mt: 4, display: "flex", justifyContent: "center" }}>
       <Paper sx={{ p: 4, width: "100%", maxWidth: 1100, borderRadius: 4 }}>
         <Typography variant="h5" fontWeight={600} mb={3} align="center">
           Müşteri Yönetimi
         </Typography>
+
         <Grid container spacing={2} mb={3}>
           <Grid>
             <TextField
@@ -178,112 +196,154 @@ const CustomerPage = () => {
               </TableRow>
             </TableHead>
             <TableBody>
-              {customers.map((customer) => (
-                <TableRow key={customer.id}>
-                  <TableCell>
-                    {editId === customer.id ? (
-                      <TextField
-                        value={editCustomer.name}
-                        onChange={(e) =>
-                          setEditCustomer({
-                            ...editCustomer,
-                            name: e.target.value,
-                          })
+              {Object.entries(groupedCustomers).map(([name, entries]) => (
+                <React.Fragment key={name}>
+                  <TableRow>
+                    <TableCell colSpan={5} sx={{ backgroundColor: "#f5f5f5" }}>
+                      <Box
+                        display="flex"
+                        alignItems="center"
+                        onClick={() =>
+                          setExpandedName((prev) =>
+                            prev === name ? null : name
+                          )
                         }
-                        size="small"
-                      />
-                    ) : (
-                      customer.name
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    {editId === customer.id ? (
-                      <TextField
-                        value={editCustomer.tc}
-                        onChange={(e) =>
-                          setEditCustomer({
-                            ...editCustomer,
-                            tc: e.target.value.replace(/\D/g, "").slice(0, 11),
-                          })
-                        }
-                        size="small"
-                      />
-                    ) : (
-                      customer.tc
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    {editId === customer.id ? (
-                      <TextField
-                        value={editCustomer.phone}
-                        onChange={(e) =>
-                          setEditCustomer({
-                            ...editCustomer,
-                            phone: e.target.value
-                              .replace(/\D/g, "")
-                              .slice(0, 11),
-                          })
-                        }
-                        size="small"
-                      />
-                    ) : (
-                      customer.phone
-                    )}
-                  </TableCell>
-
-                  <TableCell>
-                    {editId === customer.id ? (
-                      <TextField
-                        value={editCustomer.soldItem}
-                        onChange={(e) =>
-                          setEditCustomer({
-                            ...editCustomer,
-                            soldItem: e.target.value,
-                          })
-                        }
-                        size="small"
-                      />
-                    ) : (
-                      customer.soldItem || "-"
-                    )}
-                  </TableCell>
-                  <TableCell align="center">
-                    {editId === customer.id ? (
-                      <>
-                        <Button
-                          color="success"
-                          size="small"
-                          onClick={handleUpdate}
-                          sx={{ mr: 1 }}
-                        >
-                          Kaydet
-                        </Button>
-                        <Button
-                          color="inherit"
-                          size="small"
-                          onClick={() => setEditId(null)}
-                        >
-                          İptal
-                        </Button>
-                      </>
-                    ) : (
-                      <>
-                        <IconButton
-                          onClick={() => handleEdit(customer)}
-                          size="small"
-                        >
-                          <EditIcon />
-                        </IconButton>
-                        <IconButton
-                          onClick={() => setDeleteId(customer.id)}
-                          size="small"
-                        >
-                          <DeleteIcon color="error" />
-                        </IconButton>
-                      </>
-                    )}
-                  </TableCell>
-                </TableRow>
+                        sx={{ cursor: "pointer" }}
+                      >
+                        {expandedName === name ? (
+                          <ExpandLessIcon />
+                        ) : (
+                          <ExpandMoreIcon />
+                        )}
+                        <Typography sx={{ fontWeight: 600, ml: 1 }}>
+                          {name}
+                        </Typography>
+                      </Box>
+                    </TableCell>
+                  </TableRow>
+                  <TableRow>
+                    <TableCell colSpan={5} sx={{ p: 0 }}>
+                      <Collapse
+                        in={expandedName === name}
+                        timeout="auto"
+                        unmountOnExit
+                      >
+                        <Table size="small">
+                          <TableBody>
+                            {entries.map((customer) => (
+                              <TableRow key={customer.id}>
+                                <TableCell>
+                                  {editId === customer.id ? (
+                                    <TextField
+                                      value={editCustomer.name}
+                                      onChange={(e) =>
+                                        setEditCustomer({
+                                          ...editCustomer,
+                                          name: e.target.value,
+                                        })
+                                      }
+                                      size="small"
+                                    />
+                                  ) : (
+                                    customer.name
+                                  )}
+                                </TableCell>
+                                <TableCell>
+                                  {editId === customer.id ? (
+                                    <TextField
+                                      value={editCustomer.tc}
+                                      onChange={(e) =>
+                                        setEditCustomer({
+                                          ...editCustomer,
+                                          tc: e.target.value
+                                            .replace(/\D/g, "")
+                                            .slice(0, 11),
+                                        })
+                                      }
+                                      size="small"
+                                    />
+                                  ) : (
+                                    customer.tc
+                                  )}
+                                </TableCell>
+                                <TableCell>
+                                  {editId === customer.id ? (
+                                    <TextField
+                                      value={editCustomer.phone}
+                                      onChange={(e) =>
+                                        setEditCustomer({
+                                          ...editCustomer,
+                                          phone: e.target.value
+                                            .replace(/\D/g, "")
+                                            .slice(0, 11),
+                                        })
+                                      }
+                                      size="small"
+                                    />
+                                  ) : (
+                                    customer.phone
+                                  )}
+                                </TableCell>
+                                <TableCell>
+                                  {editId === customer.id ? (
+                                    <TextField
+                                      value={editCustomer.soldItem}
+                                      onChange={(e) =>
+                                        setEditCustomer({
+                                          ...editCustomer,
+                                          soldItem: e.target.value,
+                                        })
+                                      }
+                                      size="small"
+                                    />
+                                  ) : (
+                                    customer.soldItem || "-"
+                                  )}
+                                </TableCell>
+                                <TableCell align="center">
+                                  {editId === customer.id ? (
+                                    <>
+                                      <Button
+                                        color="success"
+                                        size="small"
+                                        onClick={handleUpdate}
+                                        sx={{ mr: 1 }}
+                                      >
+                                        Kaydet
+                                      </Button>
+                                      <Button
+                                        color="inherit"
+                                        size="small"
+                                        onClick={() => setEditId(null)}
+                                      >
+                                        İptal
+                                      </Button>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <IconButton
+                                        onClick={() => handleEdit(customer)}
+                                        size="small"
+                                      >
+                                        <EditIcon />
+                                      </IconButton>
+                                      <IconButton
+                                        onClick={() => setDeleteId(customer.id)}
+                                        size="small"
+                                      >
+                                        <DeleteIcon color="error" />
+                                      </IconButton>
+                                    </>
+                                  )}
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </Collapse>
+                    </TableCell>
+                  </TableRow>
+                </React.Fragment>
               ))}
             </TableBody>
           </Table>

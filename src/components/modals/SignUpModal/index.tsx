@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { useAuth } from "src/contexts/UseAuth";
-import { Link, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import {
   TextField,
   Button,
@@ -107,20 +107,6 @@ const SignUp: React.FC = () => {
               Kayıt Ol
             </Button>
           </form>
-
-          <Typography variant="body2" mt={3}>
-            Zaten bir hesabınız var mı?{" "}
-            <Link
-              to="/login"
-              style={{
-                textDecoration: "none",
-                color: "#1976d2",
-                fontWeight: 500,
-              }}
-            >
-              Giriş Yap
-            </Link>
-          </Typography>
         </Box>
       </Container>
 
