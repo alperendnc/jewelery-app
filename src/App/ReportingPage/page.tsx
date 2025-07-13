@@ -128,7 +128,6 @@ const ReportingPage = () => {
           <Tab label="Toptancı" />
         </Tabs>
 
-        {/* Stok */}
         {tab === 0 && (
           <TableContainer>
             <Table>
@@ -154,7 +153,6 @@ const ReportingPage = () => {
           </TableContainer>
         )}
 
-        {/* Satış */}
         {tab === 1 && (
           <TableContainer>
             <Table>
@@ -180,7 +178,6 @@ const ReportingPage = () => {
           </TableContainer>
         )}
 
-        {/* Kar-Zarar */}
         {tab === 2 && (
           <TableContainer>
             <Table>
@@ -206,7 +203,6 @@ const ReportingPage = () => {
           </TableContainer>
         )}
 
-        {/* Toptancı */}
         {tab === 3 && (
           <>
             <Box sx={{ display: "flex", gap: 4, mb: 2 }}>
@@ -264,7 +260,6 @@ const ReportingPage = () => {
           </>
         )}
 
-        {/* Düzenle Dialog */}
         <Dialog
           open={!!editId}
           onClose={() => setEditId(null)}
@@ -331,7 +326,6 @@ const ReportingPage = () => {
           </DialogActions>
         </Dialog>
 
-        {/* Silme Dialog */}
         <Dialog open={!!deleteId} onClose={() => setDeleteId(null)}>
           <DialogTitle>Kayıt Sil</DialogTitle>
           <DialogContent>

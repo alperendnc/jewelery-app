@@ -165,7 +165,6 @@ const TrackingPage = () => {
           <Tab label="Toptancı İşlemleri" />
         </Tabs>
 
-        {/* KASA VE FİNANS TAKİBİ */}
         {tabIndex === 0 && (
           <>
             <Box sx={{ display: "flex", alignItems: "center", mb: 2 }}>
@@ -455,7 +454,6 @@ const TrackingPage = () => {
           </>
         )}
 
-        {/* TOPTANCI */}
         {tabIndex === 1 && (
           <>
             <Typography variant="h5" fontWeight={600} mb={3} textAlign="center">

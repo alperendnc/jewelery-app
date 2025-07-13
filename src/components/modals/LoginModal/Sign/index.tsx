@@ -25,7 +25,7 @@ export default function Login() {
     "success"
   );
 
-  const [showWelcomeMessage, setShowWelcomeMessage] = useState(false); // 👈 yeni eklendi
+  const [showWelcomeMessage, setShowWelcomeMessage] = useState(false);
 
   const showSnackbar = (message: string, severity: "success" | "error") => {
     setSnackbarMessage(message);
@@ -37,7 +37,7 @@ export default function Login() {
     e.preventDefault();
     try {
       await login(email, password);
-      setShowWelcomeMessage(true); // 👈 başarı sonrası göster
+      setShowWelcomeMessage(true);
       showSnackbar("Giriş başarılı!", "success");
       setTimeout(() => navigate("/"), 1500);
     } catch (err) {
