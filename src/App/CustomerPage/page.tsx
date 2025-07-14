@@ -50,6 +50,8 @@ const CustomerPage = () => {
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [expandedName, setExpandedName] = useState<string | null>(null);
 
+  const [searchTerm, setSearchTerm] = useState("");
+
   useEffect(() => {
     const unsubscribe = listenCustomers((data) => setCustomers(data));
     return () => unsubscribe();
@@ -115,7 +117,17 @@ const CustomerPage = () => {
     return groups;
   };
 
-  const groupedCustomers = groupByName(customers);
+  const filteredCustomers = customers.filter((customer) => {
+    const term = searchTerm.toLowerCase();
+    return (
+      customer.name.toLowerCase().includes(term) ||
+      customer.tc.toLowerCase().includes(term) ||
+      customer.phone.toLowerCase().includes(term) ||
+      (customer.soldItem?.toLowerCase().includes(term) ?? false)
+    );
+  });
+
+  const groupedCustomers = groupByName(filteredCustomers);
 
   return (
     <Box sx={{ mt: 4, display: "flex", justifyContent: "center" }}>
@@ -123,6 +135,15 @@ const CustomerPage = () => {
         <Typography variant="h5" fontWeight={600} mb={3} align="center">
           Müşteri Yönetimi
         </Typography>
+
+        <Box mb={3}>
+          <TextField
+            label="Ara "
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            fullWidth
+          />
+        </Box>
 
         <Grid container spacing={2} mb={3}>
           <Grid>
@@ -196,6 +217,13 @@ const CustomerPage = () => {
               </TableRow>
             </TableHead>
             <TableBody>
+              {Object.entries(groupedCustomers).length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={5} align="center">
+                    Arama kriterlerinize uygun müşteri bulunamadı.
+                  </TableCell>
+                </TableRow>
+              )}
               {Object.entries(groupedCustomers).map(([name, entries]) => (
                 <React.Fragment key={name}>
                   <TableRow>

@@ -1,6 +1,6 @@
 {
   "name": "jeweler",
-  "homepage": ".",
+  "homepage": "https://github.com/alperendnc/jewelery-app",
   "version": "0.1.0",
   "private": true,
   "dependencies": {
