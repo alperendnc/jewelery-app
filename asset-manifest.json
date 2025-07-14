@@ -1,10 +1,10 @@
 {
   "files": {
-    "main.js": "/alperendnc/jewelery-app/static/js/main.8858c2f4.js",
-    "index.html": "/alperendnc/jewelery-app/index.html",
-    "main.8858c2f4.js.map": "/alperendnc/jewelery-app/static/js/main.8858c2f4.js.map"
+    "main.js": "/jewelery-app/static/js/main.b0826c42.js",
+    "index.html": "/jewelery-app/index.html",
+    "main.b0826c42.js.map": "/jewelery-app/static/js/main.b0826c42.js.map"
   },
   "entrypoints": [
-    "static/js/main.8858c2f4.js"
+    "static/js/main.b0826c42.js"
   ]
 }
