@@ -23,6 +23,7 @@ const categories = [
   "Ata Altın",
   "Bilezik",
   "24 Ayar",
+  "14 Ayar Alyans",
   "22 Ayar",
   "Reşat Altın",
   "Ziynet Altın",

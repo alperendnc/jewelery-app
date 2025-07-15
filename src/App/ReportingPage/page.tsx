@@ -24,7 +24,6 @@ import EditIcon from "@mui/icons-material/Edit";
 import DeleteIcon from "@mui/icons-material/Delete";
 import { useAuth, Product, Sale, Purchase } from "src/contexts/UseAuth";
 
-// 🔧 Tarih formatlama fonksiyonu
 const formatDate = (isoDate: string) => {
   const date = new Date(isoDate);
   return date.toLocaleString("tr-TR", {
