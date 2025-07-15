@@ -39,6 +39,7 @@ export interface Purchase {
   total: number;
   paid: number;
   date: string;
+  paymentMethod?: "Nakit" | "IBAN" | "Post";
 }
 
 export interface Customer {
@@ -62,6 +63,7 @@ export interface Sale {
   total: number;
   date: string;
   customer?: Omit<Customer, "id" | "createdAt">;
+  paymentMethod?: "Nakit" | "IBAN" | "Post";
 }
 
 export interface Transaction {
@@ -78,7 +80,6 @@ interface AuthContextType {
   getProducts: () => Promise<Product[]>;
   updateProduct: (id: string, updatedFields: Partial<Product>) => Promise<void>;
   deleteProduct: (id: string) => Promise<void>;
-
   addCustomer: (customer: Omit<Customer, "id" | "createdAt">) => Promise<void>;
   getCustomers: () => Promise<Customer[]>;
   updateCustomer: (
@@ -87,15 +88,8 @@ interface AuthContextType {
   ) => Promise<void>;
   deleteCustomer: (id: string) => Promise<void>;
   listenCustomers: (callback: (customers: Customer[]) => void) => () => void;
-
   addSale: (sale: Omit<Sale, "id">) => Promise<void>;
   getSales: () => Promise<Sale[]>;
-
-  getPurchases: () => Promise<Purchase[]>;
-  updatePurchase: (id: string, data: Omit<Purchase, "id">) => Promise<void>;
-  deletePurchase: (id: string) => Promise<void>;
-  addPurchases: (purchase: Omit<Purchase, "id">) => Promise<void>;
-
   addTransaction: (transaction: Omit<Transaction, "id">) => Promise<void>;
   getTransactions: () => Promise<Transaction[]>;
   updateTransaction: (
@@ -103,7 +97,12 @@ interface AuthContextType {
     updatedFields: Partial<Transaction>
   ) => Promise<void>;
   deleteTransaction: (id: string) => Promise<void>;
-
+  addPurchases: (purchase: Omit<Purchase, "id">) => Promise<void>;
+  getPurchases: () => Promise<Purchase[]>;
+  updatePurchase: (id: string, data: Omit<Purchase, "id">) => Promise<void>;
+  deletePurchase: (id: string) => Promise<void>;
+  decreaseStockByOne: (productId: string) => Promise<void>;
+  increaseStockByOne: (productId: string) => Promise<void>;
   currentUser: User | null;
   signUp: (email: string, password: string) => Promise<User>;
   login: (email: string, password: string) => Promise<User>;
@@ -165,6 +164,20 @@ export function AuthProvider({ children }: AuthProviderProps) {
     await deleteDoc(doc(db, "products", id));
   };
 
+  const decreaseStockByOne = async (productId: string) => {
+    const products = await getProducts();
+    const product = products.find((p) => p.id === productId);
+    if (!product || product.stock === undefined || product.stock <= 0) return;
+    await updateProduct(product.id!, { stock: product.stock - 1 });
+  };
+
+  const increaseStockByOne = async (productId: string) => {
+    const products = await getProducts();
+    const product = products.find((p) => p.id === productId);
+    if (!product || product.stock === undefined) return;
+    await updateProduct(product.id!, { stock: product.stock + 1 });
+  };
+
   const addCustomer = async (customer: Omit<Customer, "id" | "createdAt">) => {
     await addDoc(collection(db, "customers"), {
       ...customer,
@@ -206,10 +219,11 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
   const addSale = async (sale: Omit<Sale, "id">) => {
     await addDoc(collection(db, "sales"), sale);
+
     if (sale.customer) {
       const snapshot = await getDocs(collection(db, "customers"));
       const exists = snapshot.docs.some(
-        (doc) => doc.data().tc === sale.customer?.tc
+        (doc) => (doc.data() as Customer).tc === sale.customer?.tc
       );
 
       if (!exists) {
@@ -220,6 +234,26 @@ export function AuthProvider({ children }: AuthProviderProps) {
         });
       }
     }
+
+    const productsSnapshot = await getDocs(collection(db, "products"));
+    const productDoc = productsSnapshot.docs.find(
+      (doc) => (doc.data() as Product).name === sale.productName
+    );
+
+    if (!productDoc) {
+      throw new Error("Satılan ürün stokta bulunamadı.");
+    }
+
+    const currentStock = (productDoc.data() as Product).stock || 0;
+
+    const newStock = currentStock - 1;
+
+    if (newStock < 0) {
+      throw new Error("Stok yetersiz!");
+    }
+
+    const ref = doc(db, "products", productDoc.id);
+    await setDoc(ref, { stock: newStock }, { merge: true });
   };
 
   const getSales = async (): Promise<Sale[]> => {
@@ -260,10 +294,12 @@ export function AuthProvider({ children }: AuthProviderProps) {
       (doc) => ({ id: doc.id, ...doc.data() } as Purchase)
     );
   };
+
   const updatePurchase = async (id: string, data: Omit<Purchase, "id">) => {
     const docRef = doc(db, "purchases", id);
     await setDoc(docRef, data);
   };
+
   const deletePurchase = async (id: string) => {
     await deleteDoc(doc(db, "purchases", id));
   };
@@ -273,6 +309,14 @@ export function AuthProvider({ children }: AuthProviderProps) {
       ...purchase,
       date: new Date().toISOString(),
     });
+
+    const product = (await getProducts()).find(
+      (p) => p.name === purchase.productName
+    );
+    if (product) {
+      const newStock = product.stock + 1;
+      await updateProduct(product.id!, { stock: newStock });
+    }
   };
 
   return (
@@ -302,6 +346,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
         getPurchases,
         updatePurchase,
         deletePurchase,
+        decreaseStockByOne,
+        increaseStockByOne,
       }}
     >
       {!loading && children}

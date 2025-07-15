@@ -3,357 +3,138 @@ import {
   Box,
   Paper,
   Typography,
-  TextField,
   Button,
-  Grid,
   Table,
   TableBody,
   TableCell,
   TableContainer,
-  TableHead,
   TableRow,
-  IconButton,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
+  TextField,
 } from "@mui/material";
-import EditIcon from "@mui/icons-material/Edit";
-import DeleteIcon from "@mui/icons-material/Delete";
 import { useAuth } from "src/contexts/UseAuth";
 
 type StockItem = {
   id: string;
   name: string;
-  ayar: string;
-  gram: number;
-  fiyat: number;
   adet: number;
 };
 
+const categories = [
+  "Ata Altın",
+  "Bilezik",
+  "24 Ayar",
+  "22 Ayar",
+  "Reşat Altın",
+  "Ziynet Altın",
+  "Zincir",
+];
+
 const StockPage = () => {
-  const { getProducts, addProduct, updateProduct, deleteProduct } = useAuth();
+  const { getProducts, addProduct, updateProduct } = useAuth();
 
   const [stock, setStock] = useState<StockItem[]>([]);
-  const [newItem, setNewItem] = useState({
-    name: "",
-    ayar: "",
-    gram: "",
-    fiyat: "",
-    adet: "",
-  });
-  const [editId, setEditId] = useState<string | null>(null);
-  const [editItem, setEditItem] = useState({
-    name: "",
-    ayar: "",
-    gram: "",
-    fiyat: "",
-    adet: "",
-  });
-  const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [inputAdetleri, setInputAdetleri] = useState<{
+    [name: string]: string;
+  }>({});
 
   useEffect(() => {
     async function fetchProducts() {
       const products = await getProducts();
-      const mapped = products.map((p) => ({
+      const filtered = products.filter((p: any) => categories.includes(p.name));
+      const mapped = filtered.map((p: any) => ({
         id: p.id || "",
         name: p.name,
-        ayar: p.gram.toString(),
-        gram: p.gram,
-        fiyat: p.price,
         adet: p.stock,
       }));
       setStock(mapped);
+
+      const adetObj: { [name: string]: string } = {};
+      categories.forEach((cat) => {
+        const found = mapped.find((item) => item.name === cat);
+        adetObj[cat] = found ? found.adet.toString() : "";
+      });
+      setInputAdetleri(adetObj);
     }
     fetchProducts();
   }, [getProducts]);
 
-  const handleAdd = async () => {
-    if (
-      !newItem.name ||
-      !newItem.ayar ||
-      !newItem.gram ||
-      !newItem.fiyat ||
-      !newItem.adet
-    )
-      return;
-    await addProduct({
-      name: newItem.name,
-      gram: Number(newItem.gram),
-      price: Number(newItem.fiyat),
-      stock: Number(newItem.adet),
-    });
-    setNewItem({ name: "", ayar: "", gram: "", fiyat: "", adet: "" });
-    const updated = await getProducts();
-    setStock(
-      updated.map((p) => ({
-        id: p.id || "",
-        name: p.name,
-        ayar: p.gram.toString(),
-        gram: p.gram,
-        fiyat: p.price,
-        adet: p.stock,
-      }))
-    );
+  const handleInputChange = (name: string, value: string) => {
+    if (/^\d*$/.test(value)) {
+      setInputAdetleri((prev) => ({ ...prev, [name]: value }));
+    }
   };
 
-  const handleDelete = async (id: string) => {
-    await deleteProduct(id);
-    setDeleteId(null);
-    setStock((prev) => prev.filter((item) => item.id !== id));
-  };
+  const handleSave = async (name: string) => {
+    const value = inputAdetleri[name];
+    if (value === undefined || value === "" || isNaN(Number(value))) return;
 
-  const handleEdit = (item: StockItem) => {
-    setEditId(item.id);
-    setEditItem({
-      name: item.name,
-      ayar: item.ayar,
-      gram: item.gram.toString(),
-      fiyat: item.fiyat.toString(),
-      adet: item.adet.toString(),
-    });
-  };
+    const existing = stock.find((item) => item.name === name);
 
-  const handleUpdate = async () => {
-    if (editId === null) return;
-    await updateProduct(editId, {
-      name: editItem.name,
-      gram: Number(editItem.gram),
-      price: Number(editItem.fiyat),
-      stock: Number(editItem.adet),
-    });
-    setEditId(null);
-    setEditItem({ name: "", ayar: "", gram: "", fiyat: "", adet: "" });
+    if (existing) {
+      await updateProduct(existing.id, { stock: Number(value) });
+    } else {
+      await addProduct({
+        name: name,
+        gram: 0,
+        price: 0,
+        stock: Number(value),
+      });
+    }
 
     const updated = await getProducts();
-    setStock(
-      updated.map((p) => ({
-        id: p.id || "",
-        name: p.name,
-        ayar: p.gram.toString(),
-        gram: p.gram,
-        fiyat: p.price,
-        adet: p.stock,
-      }))
-    );
+    const filtered = updated.filter((p: any) => categories.includes(p.name));
+    const mapped = filtered.map((p: any) => ({
+      id: p.id || "",
+      name: p.name,
+      adet: p.stock,
+    }));
+    setStock(mapped);
   };
 
   return (
     <Box sx={{ mt: 4, display: "flex", justifyContent: "center" }}>
-      <Paper sx={{ p: 4, width: "100%", maxWidth: 900, borderRadius: 4 }}>
+      <Paper sx={{ p: 4, width: "100%", maxWidth: 600, borderRadius: 4 }}>
         <Typography variant="h5" fontWeight={600} mb={3} align="center">
           Stok Yönetimi
         </Typography>
-        <Grid container spacing={2} mb={3}>
-          <Grid>
-            <TextField
-              label="Ürün Adı"
-              value={newItem.name}
-              onChange={(e) => setNewItem({ ...newItem, name: e.target.value })}
-              fullWidth
-            />
-          </Grid>
-          <Grid>
-            <TextField
-              label="Ayar"
-              value={newItem.ayar}
-              onChange={(e) => setNewItem({ ...newItem, ayar: e.target.value })}
-              fullWidth
-            />
-          </Grid>
-          <Grid>
-            <TextField
-              label="Gram"
-              type="number"
-              value={newItem.gram}
-              onChange={(e) => setNewItem({ ...newItem, gram: e.target.value })}
-              fullWidth
-            />
-          </Grid>
-          <Grid>
-            <TextField
-              label="Fiyat"
-              type="number"
-              value={newItem.fiyat}
-              onChange={(e) =>
-                setNewItem({ ...newItem, fiyat: e.target.value })
-              }
-              fullWidth
-            />
-          </Grid>
-          <Grid>
-            <TextField
-              label="Adet"
-              type="number"
-              value={newItem.adet}
-              onChange={(e) => setNewItem({ ...newItem, adet: e.target.value })}
-              fullWidth
-            />
-          </Grid>
-          <Grid>
-            <Button
-              variant="contained"
-              color="primary"
-              fullWidth
-              onClick={handleAdd}
-              sx={{ height: "100%" }}
-            >
-              Ekle
-            </Button>
-          </Grid>
-        </Grid>
 
-        <TableContainer component={Paper} sx={{ mt: 2 }}>
+        <TableContainer component={Paper}>
           <Table>
-            <TableHead>
-              <TableRow>
-                <TableCell>Ürün Adı</TableCell>
-                <TableCell>Ayar</TableCell>
-                <TableCell>Gram</TableCell>
-                <TableCell>Fiyat</TableCell>
-                <TableCell>Adet</TableCell>
-                <TableCell align="center">İşlemler</TableCell>
-              </TableRow>
-            </TableHead>
             <TableBody>
-              {stock.map((item) => (
-                <TableRow key={item.id}>
-                  <TableCell>
-                    {editId === item.id ? (
+              {categories.map((cat) => {
+                const currentStock = stock.find((item) => item.name === cat);
+                return (
+                  <TableRow key={cat}>
+                    <TableCell sx={{ fontWeight: "bold" }}>{cat}</TableCell>
+                    <TableCell>
+                      Mevcut: {currentStock ? currentStock.adet : 0}
+                    </TableCell>
+                    <TableCell>
                       <TextField
-                        value={editItem.name}
-                        onChange={(e) =>
-                          setEditItem({ ...editItem, name: e.target.value })
-                        }
                         size="small"
-                      />
-                    ) : (
-                      item.name
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    {editId === item.id ? (
-                      <TextField
-                        value={editItem.ayar}
-                        onChange={(e) =>
-                          setEditItem({ ...editItem, ayar: e.target.value })
-                        }
-                        size="small"
-                      />
-                    ) : (
-                      item.ayar
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    {editId === item.id ? (
-                      <TextField
-                        value={editItem.gram}
                         type="number"
-                        onChange={(e) =>
-                          setEditItem({
-                            ...editItem,
-                            gram: e.target.value,
-                          })
-                        }
-                        size="small"
-                        sx={{ width: 80 }}
+                        value={inputAdetleri[cat] || ""}
+                        onChange={(e) => handleInputChange(cat, e.target.value)}
+                        inputProps={{ min: 0 }}
+                        placeholder="Adet gir"
+                        sx={{ width: 100 }}
                       />
-                    ) : (
-                      item.gram
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    {editId === item.id ? (
-                      <TextField
-                        value={editItem.fiyat}
-                        type="number"
-                        onChange={(e) =>
-                          setEditItem({
-                            ...editItem,
-                            fiyat: e.target.value,
-                          })
-                        }
+                    </TableCell>
+                    <TableCell>
+                      <Button
+                        variant="contained"
                         size="small"
-                      />
-                    ) : (
-                      item.fiyat
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    {editId === item.id ? (
-                      <TextField
-                        value={editItem.adet}
-                        type="number"
-                        onChange={(e) =>
-                          setEditItem({
-                            ...editItem,
-                            adet: e.target.value,
-                          })
-                        }
-                        size="small"
-                        sx={{ width: 60 }}
-                      />
-                    ) : (
-                      item.adet
-                    )}
-                  </TableCell>
-                  <TableCell align="center">
-                    {editId === item.id ? (
-                      <>
-                        <Button
-                          color="success"
-                          size="small"
-                          onClick={handleUpdate}
-                          sx={{ mr: 1 }}
-                        >
-                          Kaydet
-                        </Button>
-                        <Button
-                          color="inherit"
-                          size="small"
-                          onClick={() => setEditId(null)}
-                        >
-                          İptal
-                        </Button>
-                      </>
-                    ) : (
-                      <>
-                        <IconButton
-                          onClick={() => handleEdit(item)}
-                          size="small"
-                        >
-                          <EditIcon />
-                        </IconButton>
-                        <IconButton
-                          onClick={() => setDeleteId(item.id)}
-                          size="small"
-                        >
-                          <DeleteIcon color="error" />
-                        </IconButton>
-                      </>
-                    )}
-                  </TableCell>
-                </TableRow>
-              ))}
+                        onClick={() => handleSave(cat)}
+                      >
+                        Kaydet / Güncelle
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
             </TableBody>
           </Table>
         </TableContainer>
-
-        <Dialog open={deleteId !== null} onClose={() => setDeleteId(null)}>
-          <DialogTitle>Ürünü Sil</DialogTitle>
-          <DialogContent>
-            <Typography>Bu ürünü silmek istediğinize emin misiniz?</Typography>
-          </DialogContent>
-          <DialogActions>
-            <Button onClick={() => setDeleteId(null)}>İptal</Button>
-            <Button
-              color="error"
-              onClick={() => deleteId !== null && handleDelete(deleteId)}
-            >
-              Sil
-            </Button>
-          </DialogActions>
-        </Dialog>
       </Paper>
     </Box>
   );

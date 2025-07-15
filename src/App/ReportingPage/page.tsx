@@ -24,6 +24,18 @@ import EditIcon from "@mui/icons-material/Edit";
 import DeleteIcon from "@mui/icons-material/Delete";
 import { useAuth, Product, Sale, Purchase } from "src/contexts/UseAuth";
 
+// 🔧 Tarih formatlama fonksiyonu
+const formatDate = (isoDate: string) => {
+  const date = new Date(isoDate);
+  return date.toLocaleString("tr-TR", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+};
+
 const ReportingPage = () => {
   const [tab, setTab] = useState(0);
   const {
@@ -134,18 +146,14 @@ const ReportingPage = () => {
               <TableHead>
                 <TableRow>
                   <TableCell>Ürün</TableCell>
-                  <TableCell>Gram</TableCell>
                   <TableCell>Stok</TableCell>
-                  <TableCell>Fiyat (TL)</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
                 {stockReports.map((r) => (
                   <TableRow key={r.id}>
                     <TableCell>{r.name}</TableCell>
-                    <TableCell>{r.gram}</TableCell>
                     <TableCell>{r.stock}</TableCell>
-                    <TableCell>{r.price}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -162,15 +170,21 @@ const ReportingPage = () => {
                   <TableCell>Ürün</TableCell>
                   <TableCell>Adet</TableCell>
                   <TableCell>Tutar (TL)</TableCell>
+                  <TableCell>Müşteri</TableCell>
+                  <TableCell>Ödeme Yöntemi</TableCell>
+                  <TableCell>Ödenen (TL)</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
                 {salesReports.map((r) => (
                   <TableRow key={r.id}>
-                    <TableCell>{r.date}</TableCell>
+                    <TableCell>{formatDate(r.date)}</TableCell>
                     <TableCell>{r.productName}</TableCell>
                     <TableCell>{r.quantity}</TableCell>
                     <TableCell>{r.total}</TableCell>
+                    <TableCell>{(r as any).customerName || "-"}</TableCell>
+                    <TableCell>{(r as any).paymentMethod || "-"}</TableCell>
+                    <TableCell>{(r as any).paid ?? r.total}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -228,19 +242,21 @@ const ReportingPage = () => {
                     <TableCell>Tutar (TL)</TableCell>
                     <TableCell>Ödenen (TL)</TableCell>
                     <TableCell>Kalan (TL)</TableCell>
+                    <TableCell>Ödeme Yöntemi</TableCell>
                     <TableCell align="center">İşlemler</TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
                   {purchaseReports.map((r) => (
                     <TableRow key={r.id}>
-                      <TableCell>{r.date}</TableCell>
+                      <TableCell>{formatDate(r.date)}</TableCell>
                       <TableCell>{r.supplierName}</TableCell>
                       <TableCell>{r.productName}</TableCell>
                       <TableCell>{r.quantity}</TableCell>
                       <TableCell>{r.total.toFixed(2)}</TableCell>
                       <TableCell>{r.paid.toFixed(2)}</TableCell>
                       <TableCell>{(r.total - r.paid).toFixed(2)}</TableCell>
+                      <TableCell>{(r as any).paymentMethod || "-"}</TableCell>
                       <TableCell align="center">
                         <IconButton size="small" onClick={() => handleEdit(r)}>
                           <EditIcon />

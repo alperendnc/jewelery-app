@@ -45,7 +45,6 @@ const TrackingPage = () => {
   } = useAuth();
 
   const [tabIndex, setTabIndex] = useState(0);
-
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [purchaseList, setPurchaseList] = useState<Purchase[]>([]);
 
@@ -145,12 +144,17 @@ const TrackingPage = () => {
     setPurchaseList(await getPurchases());
   };
 
-  const totalIn = transactions
+  const toplamSatis = transactions
     .filter((t) => t.type === "Giriş")
     .reduce((sum, t) => sum + t.amount, 0);
-  const totalOut = transactions
+
+  const toplamCikis = transactions
     .filter((t) => t.type === "Çıkış")
     .reduce((sum, t) => sum + t.amount, 0);
+
+  const toplamAlis = purchaseList.reduce((sum, p) => sum + p.paid, 0);
+
+  const karZarar = toplamSatis - toplamAlis;
 
   return (
     <Box sx={{ mt: 4, display: "flex", justifyContent: "center" }}>
@@ -173,6 +177,25 @@ const TrackingPage = () => {
               />
               <Typography variant="h5" fontWeight={600}>
                 Kasa ve Finans Takibi
+              </Typography>
+            </Box>
+
+            <Box sx={{ display: "flex", gap: 4, flexWrap: "wrap", mb: 3 }}>
+              <Typography color="success.main" fontWeight={600}>
+                Toplam Satış: {toplamSatis.toFixed(2)} TL
+              </Typography>
+              <Typography color="error.main" fontWeight={600}>
+                Toplam Alış: {toplamAlis.toFixed(2)} TL
+              </Typography>
+              <Typography
+                color={karZarar >= 0 ? "success.main" : "error.main"}
+                fontWeight={600}
+              >
+                {karZarar >= 0 ? "Kâr" : "Zarar"}:{" "}
+                {Math.abs(karZarar).toFixed(2)} TL
+              </Typography>
+              <Typography color="text.secondary" fontWeight={500}>
+                Diğer Giderler: {toplamCikis.toFixed(2)} TL
               </Typography>
             </Box>
 
@@ -256,30 +279,22 @@ const TrackingPage = () => {
                   <option value="Post">Post</option>
                 </TextField>
               </Grid>
-              <Grid>
+              <Grid sx={{ display: "flex", alignItems: "center" }}>
                 <Button
                   variant="contained"
                   color="primary"
                   fullWidth
                   onClick={handleAdd}
-                  sx={{ height: "100%" }}
+                  disabled={
+                    !newTransaction.description ||
+                    newTransaction.amount <= 0 ||
+                    !newTransaction.date
+                  }
                 >
                   Ekle
                 </Button>
               </Grid>
             </Grid>
-
-            <Box sx={{ display: "flex", gap: 4, mb: 2 }}>
-              <Typography color="success.main" fontWeight={600}>
-                Toplam Giriş: {totalIn} TL
-              </Typography>
-              <Typography color="error.main" fontWeight={600}>
-                Toplam Çıkış: {totalOut} TL
-              </Typography>
-              <Typography color="primary.main" fontWeight={600}>
-                Kasa Bakiyesi: {totalIn - totalOut} TL
-              </Typography>
-            </Box>
 
             <TableContainer component={Paper}>
               <Table>
@@ -347,7 +362,7 @@ const TrackingPage = () => {
                             size="small"
                           />
                         ) : (
-                          t.amount
+                          t.amount.toFixed(2)
                         )}
                       </TableCell>
                       <TableCell>
@@ -394,15 +409,16 @@ const TrackingPage = () => {
                         {editId === t.id ? (
                           <>
                             <Button
-                              color="success"
+                              variant="contained"
                               size="small"
+                              color="success"
                               onClick={handleUpdate}
                               sx={{ mr: 1 }}
                             >
                               Kaydet
                             </Button>
                             <Button
-                              color="inherit"
+                              variant="outlined"
                               size="small"
                               onClick={() => setEditId(null)}
                             >
@@ -411,17 +427,11 @@ const TrackingPage = () => {
                           </>
                         ) : (
                           <>
-                            <IconButton
-                              onClick={() => handleEdit(t)}
-                              size="small"
-                            >
+                            <IconButton onClick={() => handleEdit(t)}>
                               <EditIcon />
                             </IconButton>
-                            <IconButton
-                              onClick={() => setDeleteId(t.id)}
-                              size="small"
-                            >
-                              <DeleteIcon color="error" />
+                            <IconButton onClick={() => setDeleteId(t.id)}>
+                              <DeleteIcon />
                             </IconButton>
                           </>
                         )}
@@ -432,20 +442,20 @@ const TrackingPage = () => {
               </Table>
             </TableContainer>
 
-            <Dialog open={deleteId !== null} onClose={() => setDeleteId(null)}>
-              <DialogTitle>İşlemi Sil</DialogTitle>
+            <Dialog
+              open={!!deleteId}
+              onClose={() => setDeleteId(null)}
+              aria-labelledby="delete-dialog-title"
+            >
+              <DialogTitle id="delete-dialog-title">İşlemi Sil</DialogTitle>
               <DialogContent>
-                <Typography>
-                  Bu işlemi silmek istediğinize emin misiniz?
-                </Typography>
+                Bu işlemi silmek istediğinize emin misiniz?
               </DialogContent>
               <DialogActions>
-                <Button onClick={() => setDeleteId(null)} color="inherit">
-                  İptal
-                </Button>
+                <Button onClick={() => setDeleteId(null)}>İptal</Button>
                 <Button
-                  onClick={() => deleteId && handleDelete(deleteId)}
                   color="error"
+                  onClick={() => deleteId && handleDelete(deleteId)}
                 >
                   Sil
                 </Button>
@@ -456,10 +466,11 @@ const TrackingPage = () => {
 
         {tabIndex === 1 && (
           <>
-            <Typography variant="h5" fontWeight={600} mb={3} textAlign="center">
+            <Typography variant="h5" fontWeight={600} mb={2} align="center">
               Toptancı İşlemleri
             </Typography>
-            <Grid container spacing={2}>
+
+            <Grid container spacing={2} mb={3}>
               <Grid>
                 <TextField
                   label="Toptancı Adı"
@@ -479,6 +490,7 @@ const TrackingPage = () => {
               <Grid>
                 <TextField
                   label="Adet"
+                  type="number"
                   value={supplierQuantity}
                   onChange={(e) => setSupplierQuantity(e.target.value)}
                   fullWidth
@@ -486,7 +498,8 @@ const TrackingPage = () => {
               </Grid>
               <Grid>
                 <TextField
-                  label="Toplam (TL)"
+                  label="Toplam Tutar"
+                  type="number"
                   value={supplierTotal}
                   onChange={(e) => setSupplierTotal(e.target.value)}
                   fullWidth
@@ -494,7 +507,8 @@ const TrackingPage = () => {
               </Grid>
               <Grid>
                 <TextField
-                  label="Ödenen (TL)"
+                  label="Ödenen"
+                  type="number"
                   value={supplierPaid}
                   onChange={(e) => setSupplierPaid(e.target.value)}
                   fullWidth
@@ -506,56 +520,51 @@ const TrackingPage = () => {
                   type="date"
                   value={supplierDate}
                   onChange={(e) => setSupplierDate(e.target.value)}
-                  fullWidth
                   InputLabelProps={{ shrink: true }}
+                  fullWidth
                 />
               </Grid>
-              <Grid>
+              <Grid sx={{ display: "flex", alignItems: "center" }}>
                 <Button
                   variant="contained"
-                  color="secondary"
+                  color="primary"
                   fullWidth
                   onClick={handleSupplier}
-                  sx={{ height: "100%" }}
                   disabled={
                     !supplierName ||
                     !supplierProduct ||
                     !supplierQuantity ||
                     !supplierTotal ||
-                    !supplierPaid
+                    !supplierPaid ||
+                    !supplierDate
                   }
                 >
-                  Kaydet
+                  Ekle
                 </Button>
               </Grid>
             </Grid>
 
-            <Typography variant="h6" mt={4} mb={2}>
-              Toptancı Kayıtları
-            </Typography>
             <TableContainer component={Paper}>
               <Table>
                 <TableHead>
                   <TableRow>
-                    <TableCell>Tarih</TableCell>
                     <TableCell>Toptancı</TableCell>
                     <TableCell>Ürün</TableCell>
                     <TableCell>Adet</TableCell>
-                    <TableCell>Toplam (TL)</TableCell>
-                    <TableCell>Ödenen (TL)</TableCell>
-                    <TableCell>Kalan (TL)</TableCell>
+                    <TableCell>Toplam Tutar</TableCell>
+                    <TableCell>Ödenen</TableCell>
+                    <TableCell>Tarih</TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
                   {purchaseList.map((p) => (
                     <TableRow key={p.id}>
-                      <TableCell>{p.date}</TableCell>
                       <TableCell>{p.supplierName}</TableCell>
                       <TableCell>{p.productName}</TableCell>
                       <TableCell>{p.quantity}</TableCell>
-                      <TableCell>{p.total.toFixed(2)}</TableCell>
-                      <TableCell>{p.paid.toFixed(2)}</TableCell>
-                      <TableCell>{(p.total - p.paid).toFixed(2)}</TableCell>
+                      <TableCell>{p.total.toFixed(2)} TL</TableCell>
+                      <TableCell>{p.paid.toFixed(2)} TL</TableCell>
+                      <TableCell>{p.date}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
