@@ -5,7 +5,6 @@ import {
   Typography,
   TextField,
   Button,
-  Grid,
   Table,
   TableBody,
   TableCell,
@@ -23,33 +22,29 @@ import EditIcon from "@mui/icons-material/Edit";
 import DeleteIcon from "@mui/icons-material/Delete";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import ExpandLessIcon from "@mui/icons-material/ExpandLess";
+import { Customer } from "src/contexts/UseAuth";
 import { useAuth } from "src/contexts/UseAuth";
 import { useSnackbar } from "notistack";
-
 const CustomerPage = () => {
-  const { addCustomer, updateCustomer, deleteCustomer, listenCustomers } =
-    useAuth();
+  const { updateCustomer, deleteCustomer, listenCustomers } = useAuth();
   const { enqueueSnackbar } = useSnackbar();
 
-  const [customers, setCustomers] = useState<any[]>([]);
-  const [newCustomer, setNewCustomer] = useState({
-    name: "",
-    tc: "",
-    phone: "",
-    soldItem: "",
-  });
+  const [customers, setCustomers] = useState<Customer[]>([]);
 
   const [editId, setEditId] = useState<string | null>(null);
-  const [editCustomer, setEditCustomer] = useState({
+  const [editCustomer, setEditCustomer] = useState<Partial<Customer>>({
     name: "",
     tc: "",
     phone: "",
     soldItem: "",
+    total: 0,
+    paid: 0,
+    debt: 0,
+    date: "",
   });
 
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [expandedName, setExpandedName] = useState<string | null>(null);
-
   const [searchTerm, setSearchTerm] = useState("");
 
   useEffect(() => {
@@ -57,35 +52,28 @@ const CustomerPage = () => {
     return () => unsubscribe();
   }, [listenCustomers]);
 
-  const handleAdd = async () => {
-    if (!newCustomer.name || !newCustomer.tc) return;
-    try {
-      await addCustomer(newCustomer);
-      enqueueSnackbar("Müşteri eklendi", { variant: "success" });
-      setNewCustomer({
-        name: "",
-        tc: "",
-        phone: "",
-        soldItem: "",
-      });
-    } catch {
-      enqueueSnackbar("Müşteri eklenemedi", { variant: "error" });
-    }
-  };
-
   const handleDelete = async (id: string) => {
     await deleteCustomer(id);
     enqueueSnackbar("Müşteri silindi", { variant: "info" });
     setDeleteId(null);
   };
 
-  const handleEdit = (customer: any) => {
-    setEditId(customer.id);
+  const handleEdit = (customer: Customer) => {
+    setEditId(customer.id!);
     setEditCustomer({
-      name: customer.name,
-      tc: customer.tc,
-      phone: customer.phone,
+      name: customer.name || "",
+      tc: customer.tc || "",
+      phone: customer.phone || "",
       soldItem: customer.soldItem || "",
+      total: customer.total || 0,
+      paid: customer.paid || 0,
+      debt: customer.debt || 0,
+      date:
+        typeof customer.date === "object" &&
+        customer.date !== null &&
+        "toDate" in customer.date
+          ? customer.date.toDate().toISOString().slice(0, 10)
+          : customer.date?.toString().slice(0, 10) || "",
     });
   };
 
@@ -100,14 +88,19 @@ const CustomerPage = () => {
         tc: "",
         phone: "",
         soldItem: "",
+        total: 0,
+        paid: 0,
+        debt: 0,
+        date: "",
       });
-    } catch {
+    } catch (error) {
+      console.error("Müşteri güncelleme başarısız:", error);
       enqueueSnackbar("Güncelleme başarısız", { variant: "error" });
     }
   };
 
-  const groupByName = (data: any[]) => {
-    const groups: { [key: string]: any[] } = {};
+  const groupByName = (data: Customer[]) => {
+    const groups: { [key: string]: Customer[] } = {};
     data.forEach((item) => {
       if (!groups[item.name]) {
         groups[item.name] = [];
@@ -122,7 +115,7 @@ const CustomerPage = () => {
     return (
       customer.name.toLowerCase().includes(term) ||
       customer.tc.toLowerCase().includes(term) ||
-      customer.phone.toLowerCase().includes(term) ||
+      (customer.phone?.toLowerCase().includes(term) ?? false) ||
       (customer.soldItem?.toLowerCase().includes(term) ?? false)
     );
   });
@@ -138,88 +131,19 @@ const CustomerPage = () => {
 
         <Box mb={3}>
           <TextField
-            label="Ara "
+            label="Ara"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             fullWidth
           />
         </Box>
 
-        <Grid container spacing={2} mb={3}>
-          <Grid>
-            <TextField
-              label="Ad Soyad"
-              value={newCustomer.name}
-              onChange={(e) =>
-                setNewCustomer({ ...newCustomer, name: e.target.value })
-              }
-              fullWidth
-            />
-          </Grid>
-          <Grid>
-            <TextField
-              label="T.C. Kimlik"
-              value={newCustomer.tc}
-              onChange={(e) =>
-                setNewCustomer({
-                  ...newCustomer,
-                  tc: e.target.value.replace(/\D/g, "").slice(0, 11),
-                })
-              }
-              fullWidth
-            />
-          </Grid>
-          <Grid>
-            <TextField
-              label="Telefon"
-              value={newCustomer.phone}
-              onChange={(e) =>
-                setNewCustomer({
-                  ...newCustomer,
-                  phone: e.target.value.replace(/\D/g, "").slice(0, 11),
-                })
-              }
-              fullWidth
-            />
-          </Grid>
-          <Grid>
-            <TextField
-              label="Ne Almış"
-              value={newCustomer.soldItem}
-              onChange={(e) =>
-                setNewCustomer({ ...newCustomer, soldItem: e.target.value })
-              }
-              fullWidth
-            />
-          </Grid>
-          <Grid>
-            <Button
-              variant="contained"
-              color="primary"
-              fullWidth
-              onClick={handleAdd}
-              sx={{ height: "100%" }}
-            >
-              Ekle
-            </Button>
-          </Grid>
-        </Grid>
-
         <TableContainer component={Paper} sx={{ mt: 2 }}>
           <Table>
-            <TableHead>
-              <TableRow>
-                <TableCell>Ad Soyad</TableCell>
-                <TableCell>T.C.</TableCell>
-                <TableCell>Telefon</TableCell>
-                <TableCell>Ne Almış</TableCell>
-                <TableCell align="center">İşlemler</TableCell>
-              </TableRow>
-            </TableHead>
             <TableBody>
               {Object.entries(groupedCustomers).length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={5} align="center">
+                  <TableCell colSpan={10} align="center">
                     Arama kriterlerinize uygun müşteri bulunamadı.
                   </TableCell>
                 </TableRow>
@@ -227,7 +151,7 @@ const CustomerPage = () => {
               {Object.entries(groupedCustomers).map(([name, entries]) => (
                 <React.Fragment key={name}>
                   <TableRow>
-                    <TableCell colSpan={5} sx={{ backgroundColor: "#f5f5f5" }}>
+                    <TableCell colSpan={10} sx={{ backgroundColor: "#f5f5f5" }}>
                       <Box
                         display="flex"
                         alignItems="center"
@@ -250,13 +174,26 @@ const CustomerPage = () => {
                     </TableCell>
                   </TableRow>
                   <TableRow>
-                    <TableCell colSpan={5} sx={{ p: 0 }}>
+                    <TableCell colSpan={10} sx={{ p: 0 }}>
                       <Collapse
                         in={expandedName === name}
                         timeout="auto"
                         unmountOnExit
                       >
                         <Table size="small">
+                          <TableHead>
+                            <TableRow>
+                              <TableCell>Ad Soyad</TableCell>
+                              <TableCell>T.C.</TableCell>
+                              <TableCell>Telefon</TableCell>
+                              <TableCell>Son Alışveriş</TableCell>
+                              <TableCell>Toplam Satış Tutarı (TL)</TableCell>
+                              <TableCell>Toplam Ödenen (TL)</TableCell>
+                              <TableCell>Kalan Borç (TL)</TableCell>
+                              <TableCell>Tarih</TableCell>
+                              <TableCell align="center">İşlemler</TableCell>
+                            </TableRow>
+                          </TableHead>
                           <TableBody>
                             {entries.map((customer) => (
                               <TableRow key={customer.id}>
@@ -328,6 +265,78 @@ const CustomerPage = () => {
                                     customer.soldItem || "-"
                                   )}
                                 </TableCell>
+                                <TableCell>
+                                  {editId === customer.id ? (
+                                    <TextField
+                                      type="number"
+                                      value={editCustomer.total}
+                                      onChange={(e) =>
+                                        setEditCustomer({
+                                          ...editCustomer,
+                                          total: Number(e.target.value),
+                                        })
+                                      }
+                                      size="small"
+                                    />
+                                  ) : (
+                                    customer.total || "0.00"
+                                  )}
+                                </TableCell>
+                                <TableCell>
+                                  {editId === customer.id ? (
+                                    <TextField
+                                      type="number"
+                                      value={editCustomer.paid}
+                                      onChange={(e) =>
+                                        setEditCustomer({
+                                          ...editCustomer,
+                                          paid: Number(e.target.value),
+                                        })
+                                      }
+                                      size="small"
+                                    />
+                                  ) : (
+                                    customer.paid?.toFixed(2) || "0.00"
+                                  )}
+                                </TableCell>
+                                <TableCell>
+                                  {editId === customer.id ? (
+                                    <TextField
+                                      type="number"
+                                      value={editCustomer.debt}
+                                      onChange={(e) =>
+                                        setEditCustomer({
+                                          ...editCustomer,
+                                          debt: Number(e.target.value),
+                                        })
+                                      }
+                                      size="small"
+                                    />
+                                  ) : (
+                                    customer.debt?.toFixed(2) || "0.00"
+                                  )}
+                                </TableCell>
+                                <TableCell>
+                                  {editId === customer.id ? (
+                                    <TextField
+                                      value={editCustomer.date}
+                                      type="date"
+                                      onChange={(e) =>
+                                        setEditCustomer({
+                                          ...editCustomer,
+                                          date: e.target.value,
+                                        })
+                                      }
+                                      size="small"
+                                    />
+                                  ) : typeof customer.date === "object" &&
+                                    customer.date !== null &&
+                                    "toDate" in customer.date ? (
+                                    customer.date.toDate().toLocaleDateString()
+                                  ) : (
+                                    customer.date || "-"
+                                  )}
+                                </TableCell>
                                 <TableCell align="center">
                                   {editId === customer.id ? (
                                     <>
@@ -356,7 +365,9 @@ const CustomerPage = () => {
                                         <EditIcon />
                                       </IconButton>
                                       <IconButton
-                                        onClick={() => setDeleteId(customer.id)}
+                                        onClick={() =>
+                                          setDeleteId(customer.id!)
+                                        }
                                         size="small"
                                       >
                                         <DeleteIcon color="error" />

@@ -22,24 +22,18 @@ import {
 import BarChartIcon from "@mui/icons-material/BarChart";
 import EditIcon from "@mui/icons-material/Edit";
 import DeleteIcon from "@mui/icons-material/Delete";
-import { useAuth, Product, Sale, Purchase } from "src/contexts/UseAuth";
+import { useAuth, Sale, Purchase, Product } from "src/contexts/UseAuth";
+import formDate from "src/components/formDate";
 
-const formatDate = (isoDate: string) => {
-  const date = new Date(isoDate);
-  return date.toLocaleString("tr-TR", {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-};
+type EditData = Partial<Omit<Sale, "id"> & Omit<Purchase, "id">>;
 
 const ReportingPage = () => {
   const [tab, setTab] = useState(0);
   const {
     getProducts,
     getSales,
+    updateSale,
+    deleteSale,
     getPurchases,
     updatePurchase,
     deletePurchase,
@@ -49,66 +43,76 @@ const ReportingPage = () => {
   const [salesReports, setSalesReports] = useState<Sale[]>([]);
   const [purchaseReports, setPurchaseReports] = useState<Purchase[]>([]);
 
+  const [editType, setEditType] = useState<"sale" | "purchase" | null>(null);
   const [editId, setEditId] = useState<string | null>(null);
-  const [editData, setEditData] = useState<Omit<Purchase, "id">>({
-    supplierName: "",
-    productName: "",
-    quantity: 0,
-    total: 0,
-    paid: 0,
-    date: "",
-  });
+  const [editData, setEditData] = useState<EditData>({});
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [deleteType, setDeleteType] = useState<"sale" | "purchase" | null>(
+    null
+  );
+  const [filterDate, setFilterDate] = useState("");
 
   useEffect(() => {
     async function fetchData() {
-      setStockReports(await getProducts());
-      setSalesReports(await getSales());
-      setPurchaseReports(await getPurchases());
+      const [products, sales, purchases] = await Promise.all([
+        getProducts(),
+        getSales(),
+        getPurchases(),
+      ]);
+      setStockReports(products);
+      setSalesReports(sales);
+      setPurchaseReports(purchases);
     }
     fetchData();
   }, [getProducts, getSales, getPurchases]);
 
-  const profitReports = React.useMemo(() => {
-    const monthlyData: Record<string, { satis: number; maliyet: number }> = {};
+  const filteredSales = salesReports.filter((r) =>
+    filterDate ? formDate(r.date).slice(0, 10) === filterDate : true
+  );
 
-    salesReports.forEach((sale) => {
-      const month = sale.date.slice(0, 7);
-      if (!monthlyData[month]) monthlyData[month] = { satis: 0, maliyet: 0 };
-      monthlyData[month].satis += sale.total;
-      monthlyData[month].maliyet += sale.total * 0.8;
-    });
+  const filteredPurchases = purchaseReports.filter((r) =>
+    filterDate ? formDate(r.date).slice(0, 10) === filterDate : true
+  );
 
-    return Object.entries(monthlyData).map(([ay, data]) => ({
-      ay,
-      satis: data.satis,
-      maliyet: data.maliyet,
-      kar: data.satis - data.maliyet,
-    }));
-  }, [salesReports]);
-
-  const purchaseTotals = React.useMemo(() => {
-    const total = purchaseReports.reduce((sum, p) => sum + p.total, 0);
-    const paid = purchaseReports.reduce((sum, p) => sum + p.paid, 0);
-    return { total, paid, debt: total - paid };
-  }, [purchaseReports]);
-
-  const handleEdit = (purchase: Purchase) => {
-    setEditId(purchase.id);
-    setEditData({ ...purchase });
+  const handleEdit = (type: "sale" | "purchase", data: any) => {
+    setEditType(type);
+    setEditId(data.id);
+    setEditData({ ...data, date: formDate(data.date) });
   };
 
   const handleUpdate = async () => {
-    if (!editId) return;
-    await updatePurchase(editId, editData);
+    if (!editId || !editType) return;
+
+    if (editType === "sale") {
+      const dataToUpdate = { ...editData } as Omit<Sale, "id">;
+      if (dataToUpdate.paid === undefined) {
+        dataToUpdate.paid = dataToUpdate.total;
+      }
+      await updateSale(editId, dataToUpdate);
+      setSalesReports(await getSales());
+    } else if (editType === "purchase") {
+      await updatePurchase(editId, editData as Omit<Purchase, "id">);
+      setPurchaseReports(await getPurchases());
+    }
+
     setEditId(null);
-    setPurchaseReports(await getPurchases());
+    setEditType(null);
+    setEditData({});
   };
 
-  const handleDelete = async (id: string) => {
-    await deletePurchase(id);
+  const handleDelete = async () => {
+    if (!deleteId || !deleteType) return;
+
+    if (deleteType === "sale") {
+      await deleteSale(deleteId);
+      setSalesReports(await getSales());
+    } else if (deleteType === "purchase") {
+      await deletePurchase(deleteId);
+      setPurchaseReports(await getPurchases());
+    }
+
     setDeleteId(null);
-    setPurchaseReports(await getPurchases());
+    setDeleteType(null);
   };
 
   return (
@@ -127,6 +131,7 @@ const ReportingPage = () => {
             Raporlama
           </Typography>
         </Box>
+
         <Tabs
           value={tab}
           onChange={(_, v) => setTab(v)}
@@ -135,9 +140,18 @@ const ReportingPage = () => {
         >
           <Tab label="Stok" />
           <Tab label="Satış" />
-          <Tab label="Kâr/Zarar" />
-          <Tab label="Toptancı" />
+          <Tab label="Alış" />
         </Tabs>
+
+        <TextField
+          label="Tarih Filtrele"
+          type="date"
+          fullWidth
+          sx={{ mb: 2 }}
+          InputLabelProps={{ shrink: true }}
+          value={filterDate}
+          onChange={(e) => setFilterDate(e.target.value)}
+        />
 
         {tab === 0 && (
           <TableContainer>
@@ -166,24 +180,46 @@ const ReportingPage = () => {
               <TableHead>
                 <TableRow>
                   <TableCell>Tarih</TableCell>
+                  <TableCell>Müşteri</TableCell>
                   <TableCell>Ürün</TableCell>
                   <TableCell>Adet</TableCell>
                   <TableCell>Tutar (TL)</TableCell>
-                  <TableCell>Müşteri</TableCell>
-                  <TableCell>Ödeme Yöntemi</TableCell>
                   <TableCell>Ödenen (TL)</TableCell>
+                  <TableCell>Kalan (TL)</TableCell>
+                  <TableCell>Ödeme Yöntemi</TableCell>
+                  <TableCell align="center">İşlemler</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
-                {salesReports.map((r) => (
+                {filteredSales.map((r) => (
                   <TableRow key={r.id}>
-                    <TableCell>{formatDate(r.date)}</TableCell>
+                    <TableCell>{formDate(r.date)}</TableCell>
+                    <TableCell>{r.customerName || "-"}</TableCell>
                     <TableCell>{r.productName}</TableCell>
                     <TableCell>{r.quantity}</TableCell>
-                    <TableCell>{r.total}</TableCell>
-                    <TableCell>{(r as any).customerName || "-"}</TableCell>
-                    <TableCell>{(r as any).paymentMethod || "-"}</TableCell>
-                    <TableCell>{(r as any).paid ?? r.total}</TableCell>
+                    <TableCell>{r.total.toFixed(2)}</TableCell>
+                    <TableCell>{(r.paid ?? r.total).toFixed(2)}</TableCell>
+                    <TableCell>
+                      {(r.total - (r.paid ?? r.total)).toFixed(2)}
+                    </TableCell>
+                    <TableCell>{r.paymentMethod || "-"}</TableCell>
+                    <TableCell align="center">
+                      <IconButton
+                        size="small"
+                        onClick={() => handleEdit("sale", r)}
+                      >
+                        <EditIcon />
+                      </IconButton>
+                      <IconButton
+                        size="small"
+                        onClick={() => {
+                          setDeleteType("sale");
+                          setDeleteId(r.id ?? null);
+                        }}
+                      >
+                        <DeleteIcon color="error" />
+                      </IconButton>
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -192,50 +228,13 @@ const ReportingPage = () => {
         )}
 
         {tab === 2 && (
-          <TableContainer>
-            <Table>
-              <TableHead>
-                <TableRow>
-                  <TableCell>Ay</TableCell>
-                  <TableCell>Satış (TL)</TableCell>
-                  <TableCell>Maliyet (TL)</TableCell>
-                  <TableCell>Kâr (TL)</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {profitReports.map((r, i) => (
-                  <TableRow key={i}>
-                    <TableCell>{r.ay}</TableCell>
-                    <TableCell>{r.satis.toFixed(2)}</TableCell>
-                    <TableCell>{r.maliyet.toFixed(2)}</TableCell>
-                    <TableCell>{r.kar.toFixed(2)}</TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </TableContainer>
-        )}
-
-        {tab === 3 && (
           <>
-            <Box sx={{ display: "flex", gap: 4, mb: 2 }}>
-              <Typography color="primary.main" fontWeight={600}>
-                Toplam Alış: {purchaseTotals.total.toFixed(2)} TL
-              </Typography>
-              <Typography color="success.main" fontWeight={600}>
-                Toplam Ödenen: {purchaseTotals.paid.toFixed(2)} TL
-              </Typography>
-              <Typography color="error.main" fontWeight={600}>
-                Kalan Borç: {purchaseTotals.debt.toFixed(2)} TL
-              </Typography>
-            </Box>
-
             <TableContainer>
               <Table>
                 <TableHead>
                   <TableRow>
                     <TableCell>Tarih</TableCell>
-                    <TableCell>Toptancı</TableCell>
+                    <TableCell>Müşteri</TableCell>
                     <TableCell>Ürün</TableCell>
                     <TableCell>Adet</TableCell>
                     <TableCell>Tutar (TL)</TableCell>
@@ -246,23 +245,31 @@ const ReportingPage = () => {
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {purchaseReports.map((r) => (
+                  {filteredPurchases.map((r) => (
                     <TableRow key={r.id}>
-                      <TableCell>{formatDate(r.date)}</TableCell>
-                      <TableCell>{r.supplierName}</TableCell>
+                      <TableCell>{formDate(r.date)}</TableCell>
+                      <TableCell>{r.customerName}</TableCell>
                       <TableCell>{r.productName}</TableCell>
                       <TableCell>{r.quantity}</TableCell>
                       <TableCell>{r.total.toFixed(2)}</TableCell>
                       <TableCell>{r.paid.toFixed(2)}</TableCell>
                       <TableCell>{(r.total - r.paid).toFixed(2)}</TableCell>
-                      <TableCell>{(r as any).paymentMethod || "-"}</TableCell>
                       <TableCell align="center">
-                        <IconButton size="small" onClick={() => handleEdit(r)}>
+                        {r.paymentMethod || "-"}
+                      </TableCell>
+                      <TableCell align="center">
+                        <IconButton
+                          size="small"
+                          onClick={() => handleEdit("purchase", r)}
+                        >
                           <EditIcon />
                         </IconButton>
                         <IconButton
                           size="small"
-                          onClick={() => setDeleteId(r.id)}
+                          onClick={() => {
+                            setDeleteType("purchase");
+                            setDeleteId(r.id);
+                          }}
                         >
                           <DeleteIcon color="error" />
                         </IconButton>
@@ -277,61 +284,121 @@ const ReportingPage = () => {
 
         <Dialog
           open={!!editId}
-          onClose={() => setEditId(null)}
+          onClose={() => {
+            setEditId(null);
+            setEditType(null);
+            setEditData({});
+          }}
           maxWidth="sm"
           fullWidth
         >
-          <DialogTitle>Toptancı Kaydını Düzenle</DialogTitle>
+          <DialogTitle>
+            {editType === "purchase"
+              ? "Alış Kaydını Düzenle"
+              : "Satış Kaydını Düzenle"}
+          </DialogTitle>
           <DialogContent
             sx={{ display: "flex", flexWrap: "wrap", gap: 2, mt: 1 }}
           >
             <TextField
-              label="Toptancı"
-              value={editData.supplierName}
-              onChange={(e) =>
-                setEditData({ ...editData, supplierName: e.target.value })
-              }
-            />
-            <TextField
               label="Ürün"
-              value={editData.productName}
+              value={editData.productName || ""}
               onChange={(e) =>
                 setEditData({ ...editData, productName: e.target.value })
               }
+              fullWidth
             />
             <TextField
               label="Adet"
               type="number"
-              value={editData.quantity}
+              value={editData.quantity ?? ""}
               onChange={(e) =>
                 setEditData({ ...editData, quantity: Number(e.target.value) })
               }
+              fullWidth
             />
             <TextField
               label="Tutar"
               type="number"
-              value={editData.total}
+              value={editData.total ?? ""}
               onChange={(e) =>
                 setEditData({ ...editData, total: Number(e.target.value) })
               }
+              fullWidth
             />
             <TextField
               label="Ödenen"
               type="number"
-              value={editData.paid}
+              value={editData.paid ?? ""}
               onChange={(e) =>
                 setEditData({ ...editData, paid: Number(e.target.value) })
               }
+              fullWidth
             />
             <TextField
               label="Tarih"
               type="date"
               InputLabelProps={{ shrink: true }}
-              value={editData.date}
+              value={editData.date || ""}
               onChange={(e) =>
                 setEditData({ ...editData, date: e.target.value })
               }
+              fullWidth
             />
+
+            {editType === "sale" && (
+              <>
+                <TextField
+                  label="Müşteri"
+                  value={editData.customerName || ""}
+                  onChange={(e) =>
+                    setEditData({ ...editData, customerName: e.target.value })
+                  }
+                  fullWidth
+                />
+                <TextField
+                  label="Ödeme Yöntemi"
+                  value={editData.paymentMethod || ""}
+                  onChange={(e) =>
+                    setEditData({
+                      ...editData,
+                      paymentMethod: e.target.value as
+                        | "Nakit"
+                        | "IBAN"
+                        | "Post",
+                    })
+                  }
+                  fullWidth
+                />
+              </>
+            )}
+
+            {editType === "purchase" && (
+              <>
+                <TextField
+                  label="Müşteri"
+                  value={editData.customerName || ""}
+                  onChange={(e) =>
+                    setEditData({ ...editData, customerName: e.target.value })
+                  }
+                  fullWidth
+                />
+                <TextField
+                  label="Ödeme Yöntemi"
+                  value={editData.paymentMethod || ""}
+                  onChange={(e) =>
+                    setEditData({
+                      ...editData,
+                      paymentMethod: e.target.value as
+                        | "Nakit"
+                        | "IBAN"
+                        | "Post",
+                    })
+                  }
+                  fullWidth
+                />
+              </>
+            )}
           </DialogContent>
           <DialogActions>
             <Button onClick={() => setEditId(null)}>İptal</Button>
@@ -341,17 +408,20 @@ const ReportingPage = () => {
           </DialogActions>
         </Dialog>
 
-        <Dialog open={!!deleteId} onClose={() => setDeleteId(null)}>
+        <Dialog
+          open={!!deleteId}
+          onClose={() => {
+            setDeleteId(null);
+            setDeleteType(null);
+          }}
+        >
           <DialogTitle>Kayıt Sil</DialogTitle>
           <DialogContent>
             <Typography>Bu kaydı silmek istediğinize emin misiniz?</Typography>
           </DialogContent>
           <DialogActions>
             <Button onClick={() => setDeleteId(null)}>İptal</Button>
-            <Button
-              color="error"
-              onClick={() => deleteId && handleDelete(deleteId)}
-            >
+            <Button color="error" onClick={handleDelete}>
               Sil
             </Button>
           </DialogActions>

@@ -20,14 +20,13 @@ type StockItem = {
 };
 
 const categories = [
+  "22 Bilezik",
   "Ata Altın",
-  "Bilezik",
-  "24 Ayar",
-  "14 Ayar Alyans",
-  "22 Ayar",
   "Reşat Altın",
-  "Ziynet Altın",
-  "Zincir",
+  "14 Takı",
+  "24 Ayar",
+  "22 Ayar",
+  "22 Takı",
 ];
 
 const StockPage = () => {

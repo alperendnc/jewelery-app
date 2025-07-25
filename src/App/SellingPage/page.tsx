@@ -12,12 +12,14 @@ import {
   SelectChangeEvent,
   FormControl,
   InputLabel,
+  Checkbox,
+  FormControlLabel,
 } from "@mui/material";
 import { useAuth } from "src/contexts/UseAuth";
 import { useSnackbar } from "notistack";
 
 function SellingPage() {
-  const { addSale, addPurchases, getProducts } = useAuth();
+  const { addSale, addPurchases, getProducts, addCustomer } = useAuth();
   const { enqueueSnackbar } = useSnackbar();
 
   const [products, setProducts] = useState<{ id: string; name: string }[]>([]);
@@ -33,7 +35,8 @@ function SellingPage() {
   const [paymentMethod, setPaymentMethod] = useState<"Nakit" | "IBAN" | "Post">(
     "Nakit"
   );
-
+  const [paidAmount, setPaidAmount] = useState("0");
+  const [isPaidInFull, setIsPaidInFull] = useState(false);
   const [buyCustomerName, setBuyCustomerName] = useState("");
   const [buyCustomerTC, setBuyCustomerTC] = useState("");
   const [buyProduct, setBuyProduct] = useState("");
@@ -45,6 +48,28 @@ function SellingPage() {
   const [buyPaymentMethod, setBuyPaymentMethod] = useState<
     "Nakit" | "IBAN" | "Post"
   >("Nakit");
+  const [buyPaidAmount, setBuyPaidAmount] = useState("0");
+  const [isBuyPaidInFull, setIsBuyPaidInFull] = useState(false);
+
+  const productMultipliers: Record<string, number> = {
+    "22 Bilezik": 945,
+    "Ata Altın": 8820,
+    "Reşat Altın": 1007,
+    "14 Takı": 670,
+    "24 Ayar": 950,
+    "22 Ayar": 945,
+    "22 Takı": 680,
+  };
+
+  const buyProductMultipliers: Record<string, number> = {
+    "22 Bilezik": 905,
+    "Ata Altın": 8820,
+    "Reşat Altın": 997,
+    "14 Takı": 655,
+    "24 Ayar": 910,
+    "22 Ayar": 905,
+    "22 Takı": 680,
+  };
 
   useEffect(() => {
     async function fetchStockProducts() {
@@ -53,30 +78,39 @@ function SellingPage() {
         setProducts(prods.map((p) => ({ id: p.id || "", name: p.name })));
       } catch (error) {
         console.error("Ürünler yüklenemedi", error);
+        enqueueSnackbar("Ürünler yüklenirken bir hata oluştu.", {
+          variant: "error",
+        });
       }
     }
     fetchStockProducts();
-  }, [getProducts]);
+  }, [getProducts, enqueueSnackbar]);
 
   useEffect(() => {
     const fiyat = parseFloat(hasFiyat) || 0;
     const miktar = parseFloat(gram) || 0;
-    setTotal(
-      fiyat * sellMultiplier * miktar > 0
-        ? (fiyat * sellMultiplier * miktar).toFixed(2)
-        : ""
-    );
+    const calculatedTotal = fiyat * sellMultiplier * miktar;
+    setTotal(calculatedTotal > 0 ? calculatedTotal.toFixed(2) : "");
   }, [hasFiyat, gram, sellMultiplier]);
+
+  useEffect(() => {
+    if (isPaidInFull) {
+      setPaidAmount(total);
+    }
+  }, [total, isPaidInFull]);
 
   useEffect(() => {
     const fiyat = parseFloat(buyHasFiyat) || 0;
     const miktar = parseFloat(buyGram) || 0;
-    setBuyTotal(
-      fiyat * buyMultiplier * miktar > 0
-        ? (fiyat * buyMultiplier * miktar).toFixed(2)
-        : ""
-    );
+    const calculatedBuyTotal = fiyat * buyMultiplier * miktar;
+    setBuyTotal(calculatedBuyTotal > 0 ? calculatedBuyTotal.toFixed(2) : "");
   }, [buyHasFiyat, buyGram, buyMultiplier]);
+
+  useEffect(() => {
+    if (isBuyPaidInFull) {
+      setBuyPaidAmount(buyTotal);
+    }
+  }, [buyTotal, isBuyPaidInFull]);
 
   const getLocalDateTime = () => {
     const now = new Date();
@@ -96,21 +130,58 @@ function SellingPage() {
 
   const handleSell = async () => {
     try {
+      if (
+        !customerName ||
+        !customerTC ||
+        !product ||
+        !hasFiyat ||
+        !gram ||
+        !total ||
+        !paidAmount
+      ) {
+        enqueueSnackbar("Lütfen tüm satış alanlarını doldurun.", {
+          variant: "warning",
+        });
+        return;
+      }
+      if (parseFloat(paidAmount) > parseFloat(total)) {
+        enqueueSnackbar("Ödenen tutar, toplam tutardan fazla olamaz.", {
+          variant: "warning",
+        });
+        return;
+      }
+
+      await addCustomer({
+        name: customerName,
+        tc: customerTC,
+        phone: "",
+        soldItem: products.find((p) => p.id === product)?.name || "",
+        total: parseFloat(total),
+        quantity: parseFloat(gram),
+        paid: parseFloat(paidAmount),
+        date: getLocalDateTime(),
+      });
+
       await addSale({
         productId: product,
         productName: products.find((p) => p.id === product)?.name || "",
         customerId: "",
-        customerName: customerName,
+        customerName,
         quantity: parseFloat(gram),
         total: parseFloat(total),
+        paid: parseFloat(paidAmount),
         date: getLocalDateTime(),
+        paymentMethod,
         customer: {
           name: customerName,
           tc: customerTC,
           phone: "",
           soldItem: products.find((p) => p.id === product)?.name || "",
+          total: parseFloat(total),
+          quantity: parseFloat(gram),
+          paid: parseFloat(paidAmount),
+          date: getLocalDateTime(),
         },
-        paymentMethod,
       });
       enqueueSnackbar("Satış başarıyla kaydedildi!", { variant: "success" });
 
@@ -122,26 +193,57 @@ function SellingPage() {
       setGram("");
       setTotal("");
       setPaymentMethod("Nakit");
+      setPaidAmount("0");
+      setIsPaidInFull(false);
     } catch (error) {
       enqueueSnackbar("Satış kaydedilirken hata oluştu.", { variant: "error" });
-      console.error(error);
+      console.error("Satış hatası:", error);
     }
   };
 
   const handleBuy = async () => {
     try {
-      await addPurchases({
-        supplierName: buyCustomerName,
-        productName: products.find((p) => p.id === buyProduct)?.name || "",
-        quantity: parseFloat(buyGram),
+      if (
+        !buyCustomerName ||
+        !buyCustomerTC ||
+        !buyProduct ||
+        !buyHasFiyat ||
+        !buyGram ||
+        !buyTotal ||
+        !buyPaidAmount
+      ) {
+        enqueueSnackbar("Lütfen tüm alış alanlarını doldurun.", {
+          variant: "warning",
+        });
+        return;
+      }
+      if (parseFloat(buyPaidAmount) > parseFloat(buyTotal)) {
+        enqueueSnackbar("Ödenen tutar, toplam tutardan fazla olamaz.", {
+          variant: "warning",
+        });
+        return;
+      }
+
+      await addCustomer({
+        name: buyCustomerName,
+        tc: buyCustomerTC,
         total: parseFloat(buyTotal),
-        paid: parseFloat(buyTotal),
+        quantity: parseFloat(buyGram),
+        paid: parseFloat(buyPaidAmount),
         date: getLocalDateTime(),
       });
 
-      enqueueSnackbar("Alış başarıyla kaydedildi!", {
-        variant: "success",
+      await addPurchases({
+        productName: products.find((p) => p.id === buyProduct)?.name || "",
+        customerName: buyCustomerName,
+        quantity: parseFloat(buyGram),
+        total: parseFloat(buyTotal),
+        paid: parseFloat(buyPaidAmount),
+        date: getLocalDateTime(),
+        paymentMethod: buyPaymentMethod,
       });
+
+      enqueueSnackbar("Alış başarıyla kaydedildi!", { variant: "success" });
 
       setBuyCustomerName("");
       setBuyCustomerTC("");
@@ -151,9 +253,11 @@ function SellingPage() {
       setBuyGram("");
       setBuyTotal("");
       setBuyPaymentMethod("Nakit");
+      setBuyPaidAmount("0");
+      setIsBuyPaidInFull(false);
     } catch (error) {
       enqueueSnackbar("Alış kaydedilirken hata oluştu.", { variant: "error" });
-      console.error(error);
+      console.error("Alış hatası:", error);
     }
   };
 
@@ -167,12 +271,14 @@ function SellingPage() {
         sx={{ maxWidth: 1200, flexWrap: { xs: "wrap", md: "nowrap" } }}
       >
         <Grid sx={{ display: "flex" }}>
+          {" "}
           <Paper sx={{ p: 4, borderRadius: 4, width: "100%", flex: 1 }}>
             <Typography variant="h6" fontWeight={600} mb={2} align="center">
               Satış
             </Typography>
             <Grid container spacing={2}>
               <Grid>
+                {" "}
                 <TextField
                   label="Müşteri Adı"
                   value={customerName}
@@ -199,9 +305,16 @@ function SellingPage() {
                     id="product-select"
                     value={product}
                     label="Ürün"
-                    onChange={(e: SelectChangeEvent<string>) =>
-                      setProduct(e.target.value)
-                    }
+                    onChange={(e: SelectChangeEvent<string>) => {
+                      const selectedProductId = e.target.value;
+                      setProduct(selectedProductId);
+                      const productName = products.find(
+                        (p) => p.id === selectedProductId
+                      )?.name;
+                      if (productName && productMultipliers[productName]) {
+                        setSellMultiplier(productMultipliers[productName]);
+                      }
+                    }}
                   >
                     {products.map((prod) => (
                       <MenuItem key={prod.id} value={prod.id}>
@@ -229,23 +342,7 @@ function SellingPage() {
                   InputProps={{
                     endAdornment: (
                       <InputAdornment position="end">
-                        <select
-                          value={sellMultiplier}
-                          onChange={(e) =>
-                            setSellMultiplier(Number(e.target.value))
-                          }
-                          style={{
-                            border: "none",
-                            background: "transparent",
-                            fontSize: "14px",
-                            padding: "0 4px",
-                          }}
-                        >
-                          <option value={945}>945</option>
-                          <option value={8820}>8820</option>
-                          <option value={1007}>1007</option>
-                          <option value={100}>100</option>
-                        </select>
+                        {sellMultiplier}
                       </InputAdornment>
                     ),
                   }}
@@ -301,12 +398,44 @@ function SellingPage() {
                   fullWidth
                 />
               </Grid>
+              <Grid sx={{ display: "flex", alignItems: "center" }}>
+                <TextField
+                  label="Ödenen Tutar"
+                  type="number"
+                  value={paidAmount}
+                  onChange={(e) => {
+                    setPaidAmount(e.target.value.replace(/[^0-9.]/g, ""));
+                    setIsPaidInFull(false);
+                  }}
+                  InputProps={{
+                    endAdornment: (
+                      <InputAdornment position="end">TL</InputAdornment>
+                    ),
+                  }}
+                  fullWidth
+                />
+                <FormControlLabel
+                  control={
+                    <Checkbox
+                      checked={isPaidInFull}
+                      onChange={(e) => {
+                        setIsPaidInFull(e.target.checked);
+                        if (e.target.checked) {
+                          setPaidAmount(total);
+                        }
+                      }}
+                    />
+                  }
+                  label="Ödendi"
+                  sx={{ ml: 1 }}
+                />
+              </Grid>
               <Grid>
                 <Button
                   variant="contained"
                   color="primary"
                   fullWidth
-                  size="large"
+                  size="medium"
                   onClick={handleSell}
                   disabled={
                     !customerName ||
@@ -314,10 +443,11 @@ function SellingPage() {
                     !product ||
                     !ayar ||
                     !hasFiyat ||
-                    !gram
+                    !gram ||
+                    !paidAmount
                   }
                 >
-                  Satışı Tamamla
+                  Satışı Kaydet
                 </Button>
               </Grid>
             </Grid>
@@ -325,6 +455,7 @@ function SellingPage() {
         </Grid>
 
         <Grid sx={{ display: "flex" }}>
+          {" "}
           <Paper sx={{ p: 4, borderRadius: 4, width: "100%", flex: 1 }}>
             <Typography variant="h6" fontWeight={600} mb={2} align="center">
               Alış
@@ -332,7 +463,7 @@ function SellingPage() {
             <Grid container spacing={2}>
               <Grid>
                 <TextField
-                  label="Toptancı Adı"
+                  label="Müşteri Adı"
                   value={buyCustomerName}
                   onChange={(e) => setBuyCustomerName(e.target.value)}
                   fullWidth
@@ -357,9 +488,16 @@ function SellingPage() {
                     id="buy-product-select"
                     value={buyProduct}
                     label="Ürün"
-                    onChange={(e: SelectChangeEvent<string>) =>
-                      setBuyProduct(e.target.value)
-                    }
+                    onChange={(e: SelectChangeEvent<string>) => {
+                      const selectedProductId = e.target.value;
+                      setBuyProduct(selectedProductId);
+                      const productName = products.find(
+                        (p) => p.id === selectedProductId
+                      )?.name;
+                      if (productName && buyProductMultipliers[productName]) {
+                        setBuyMultiplier(buyProductMultipliers[productName]);
+                      }
+                    }}
                   >
                     {products.map((prod) => (
                       <MenuItem key={prod.id} value={prod.id}>
@@ -387,23 +525,7 @@ function SellingPage() {
                   InputProps={{
                     endAdornment: (
                       <InputAdornment position="end">
-                        <select
-                          value={buyMultiplier}
-                          onChange={(e) =>
-                            setBuyMultiplier(Number(e.target.value))
-                          }
-                          style={{
-                            border: "none",
-                            background: "transparent",
-                            fontSize: "14px",
-                            padding: "0 4px",
-                          }}
-                        >
-                          <option value={905}>905</option>
-                          <option value={8820}>8820</option>
-                          <option value={1007}>1007</option>
-                          <option value={100}>100</option>
-                        </select>
+                        {buyMultiplier}
                       </InputAdornment>
                     ),
                   }}
@@ -459,12 +581,44 @@ function SellingPage() {
                   fullWidth
                 />
               </Grid>
+              <Grid sx={{ display: "flex", alignItems: "center" }}>
+                <TextField
+                  label="Ödenen Tutar"
+                  type="number"
+                  value={buyPaidAmount}
+                  onChange={(e) => {
+                    setBuyPaidAmount(e.target.value.replace(/[^0-9.]/g, ""));
+                    setIsBuyPaidInFull(false);
+                  }}
+                  InputProps={{
+                    endAdornment: (
+                      <InputAdornment position="end">TL</InputAdornment>
+                    ),
+                  }}
+                  fullWidth
+                />
+                <FormControlLabel
+                  control={
+                    <Checkbox
+                      checked={isBuyPaidInFull}
+                      onChange={(e) => {
+                        setIsBuyPaidInFull(e.target.checked);
+                        if (e.target.checked) {
+                          setBuyPaidAmount(buyTotal);
+                        }
+                      }}
+                    />
+                  }
+                  label="Ödendi"
+                  sx={{ ml: 1 }}
+                />
+              </Grid>
               <Grid>
                 <Button
                   variant="contained"
                   color="primary"
                   fullWidth
-                  size="large"
+                  size="medium"
                   onClick={handleBuy}
                   disabled={
                     !buyCustomerName ||
@@ -472,7 +626,8 @@ function SellingPage() {
                     !buyProduct ||
                     !buyAyar ||
                     !buyHasFiyat ||
-                    !buyGram
+                    !buyGram ||
+                    !buyPaidAmount
                   }
                 >
                   Alışı Kaydet
