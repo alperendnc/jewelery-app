@@ -25,6 +25,7 @@ import ExpandLessIcon from "@mui/icons-material/ExpandLess";
 import { Customer } from "src/contexts/UseAuth";
 import { useAuth } from "src/contexts/UseAuth";
 import { useSnackbar } from "notistack";
+
 const CustomerPage = () => {
   const { updateCustomer, deleteCustomer, listenCustomers } = useAuth();
   const { enqueueSnackbar } = useSnackbar();
@@ -143,7 +144,7 @@ const CustomerPage = () => {
             <TableBody>
               {Object.entries(groupedCustomers).length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={10} align="center">
+                  <TableCell colSpan={9} align="center">
                     Arama kriterlerinize uygun müşteri bulunamadı.
                   </TableCell>
                 </TableRow>
@@ -151,7 +152,7 @@ const CustomerPage = () => {
               {Object.entries(groupedCustomers).map(([name, entries]) => (
                 <React.Fragment key={name}>
                   <TableRow>
-                    <TableCell colSpan={10} sx={{ backgroundColor: "#f5f5f5" }}>
+                    <TableCell colSpan={9} sx={{ backgroundColor: "#f5f5f5" }}>
                       <Box
                         display="flex"
                         alignItems="center"
@@ -174,7 +175,8 @@ const CustomerPage = () => {
                     </TableCell>
                   </TableRow>
                   <TableRow>
-                    <TableCell colSpan={10} sx={{ p: 0 }}>
+                    <TableCell colSpan={9} sx={{ p: 0 }}>
+                      {" "}
                       <Collapse
                         in={expandedName === name}
                         timeout="auto"
@@ -316,22 +318,6 @@ const CustomerPage = () => {
                                     customer.date.toDate().toLocaleDateString()
                                   ) : (
                                     customer.date || "-"
-                                  )}
-                                </TableCell>
-                                <TableCell>
-                                  {editId === customer.id ? (
-                                    <TextField
-                                      value={editCustomer.boughtItem}
-                                      onChange={(e) =>
-                                        setEditCustomer({
-                                          ...editCustomer,
-                                          boughtItem: e.target.value,
-                                        })
-                                      }
-                                      size="small"
-                                    />
-                                  ) : (
-                                    customer.boughtItem || "-"
                                   )}
                                 </TableCell>
                                 <TableCell align="center" sx={{ p: 0 }}>

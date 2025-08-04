@@ -61,6 +61,7 @@ const TrackingPage = () => {
   >([]);
   const [filterDate, setFilterDate] = useState("");
   const [filterMonth, setFilterMonth] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
 
   const [editId, setEditId] = useState<string | null>(null);
   const [editType, setEditType] = useState<
@@ -94,43 +95,69 @@ const TrackingPage = () => {
   }, []);
 
   const filteredTransactions = useMemo(() => {
+    const lowerCaseQuery = searchQuery.toLowerCase();
     return transactions.filter((t) => {
       const transactionDate = formDate(t.date);
-      if (filterDate) {
-        return transactionDate.startsWith(filterDate);
-      }
-      if (filterMonth) {
-        return transactionDate.startsWith(filterMonth);
-      }
-      return true;
+      const matchesDate = filterDate
+        ? transactionDate.startsWith(filterDate)
+        : true;
+      const matchesMonth = filterMonth
+        ? transactionDate.startsWith(filterMonth)
+        : true;
+      const matchesSearch =
+        t.description.toLowerCase().includes(lowerCaseQuery) ||
+        t.type.toLowerCase().includes(lowerCaseQuery) ||
+        t.amount.toString().includes(lowerCaseQuery) ||
+        t.method.toLowerCase().includes(lowerCaseQuery);
+
+      return matchesDate && matchesMonth && matchesSearch;
     });
-  }, [transactions, filterDate, filterMonth]);
+  }, [transactions, filterDate, filterMonth, searchQuery]);
 
   const filteredSupplierTransactions = useMemo(() => {
+    const lowerCaseQuery = searchQuery.toLowerCase();
     return supplierTransactions.filter((s) => {
       const supplierTransactionDate = formDate(s.date);
-      if (filterDate) {
-        return supplierTransactionDate.startsWith(filterDate);
-      }
-      if (filterMonth) {
-        return supplierTransactionDate.startsWith(filterMonth);
-      }
-      return true;
+      const matchesDate = filterDate
+        ? supplierTransactionDate.startsWith(filterDate)
+        : true;
+      const matchesMonth = filterMonth
+        ? supplierTransactionDate.startsWith(filterMonth)
+        : true;
+      const matchesSearch =
+        s.supplierName.toLowerCase().includes(lowerCaseQuery) ||
+        s.productName.toLowerCase().includes(lowerCaseQuery) ||
+        s.quantity.toString().includes(lowerCaseQuery) ||
+        s.total.toString().includes(lowerCaseQuery) ||
+        s.paid.toString().includes(lowerCaseQuery) ||
+        (s.paymentMethod &&
+          s.paymentMethod.toLowerCase().includes(lowerCaseQuery));
+
+      return matchesDate && matchesMonth && matchesSearch;
     });
-  }, [supplierTransactions, filterDate, filterMonth]);
+  }, [supplierTransactions, filterDate, filterMonth, searchQuery]);
 
   const filteredCurrencyTransactions = useMemo(() => {
+    const lowerCaseQuery = searchQuery.toLowerCase();
     return currencyTransactions.filter((c) => {
       const currencyTransactionDate = formDate(c.date);
-      if (filterDate) {
-        return currencyTransactionDate.startsWith(filterDate);
-      }
-      if (filterMonth) {
-        return currencyTransactionDate.startsWith(filterMonth);
-      }
-      return true;
+      const matchesDate = filterDate
+        ? currencyTransactionDate.startsWith(filterDate)
+        : true;
+      const matchesMonth = filterMonth
+        ? currencyTransactionDate.startsWith(filterMonth)
+        : true;
+      const matchesSearch =
+        c.name.toLowerCase().includes(lowerCaseQuery) ||
+        c.tc.toLowerCase().includes(lowerCaseQuery) ||
+        c.type.toLowerCase().includes(lowerCaseQuery) ||
+        c.amount.toString().includes(lowerCaseQuery) ||
+        c.rate.toString().includes(lowerCaseQuery) ||
+        c.total.toString().includes(lowerCaseQuery);
+
+      return matchesDate && matchesMonth && matchesSearch;
     });
-  }, [currencyTransactions, filterDate, filterMonth]);
+  }, [currencyTransactions, filterDate, filterMonth, searchQuery]);
 
   const dailySalesTotal = useMemo(() => {
     return filteredTransactions
@@ -138,7 +165,7 @@ const TrackingPage = () => {
       .reduce((sum, t) => sum + t.amount, 0);
   }, [filteredTransactions]);
 
-  const dailyPurchasesTotal = useMemo(() => {
+  const dailyPurchasesFromTransactions = useMemo(() => {
     return filteredTransactions
       .filter(
         (t) =>
@@ -147,7 +174,7 @@ const TrackingPage = () => {
       .reduce((sum, t) => sum + t.amount, 0);
   }, [filteredTransactions]);
 
-  const dailyOtherExpensesTotal = useMemo(() => {
+  const dailyOtherExpensesFromTransactions = useMemo(() => {
     return filteredTransactions
       .filter(
         (t) =>
@@ -156,25 +183,13 @@ const TrackingPage = () => {
       .reduce((sum, t) => sum + t.amount, 0);
   }, [filteredTransactions]);
 
-  const dailySupplierPurchasesTotal = useMemo(() => {
-    return filteredSupplierTransactions.reduce((sum, s) => sum + s.total, 0);
-  }, [filteredSupplierTransactions]);
-
-  const dailyTotalExpenses = useMemo(() => {
-    return (
-      dailyPurchasesTotal +
-      dailyOtherExpensesTotal +
-      dailySupplierPurchasesTotal
-    );
-  }, [
-    dailyPurchasesTotal,
-    dailyOtherExpensesTotal,
-    dailySupplierPurchasesTotal,
-  ]);
+  const dailyTotalExpensesForCashTracking = useMemo(() => {
+    return dailyPurchasesFromTransactions + dailyOtherExpensesFromTransactions;
+  }, [dailyPurchasesFromTransactions, dailyOtherExpensesFromTransactions]);
 
   const dailyProfit = useMemo(() => {
-    return dailySalesTotal - dailyTotalExpenses;
-  }, [dailySalesTotal, dailyTotalExpenses]);
+    return dailySalesTotal - dailyTotalExpensesForCashTracking;
+  }, [dailySalesTotal, dailyTotalExpensesForCashTracking]);
 
   const monthlySalesTotal = useMemo(() => {
     if (!filterMonth) return 0;
@@ -184,7 +199,7 @@ const TrackingPage = () => {
       .reduce((sum, t) => sum + t.amount, 0);
   }, [transactions, filterMonth]);
 
-  const monthlyPurchasesTotal = useMemo(() => {
+  const monthlyPurchasesFromTransactions = useMemo(() => {
     if (!filterMonth) return 0;
     return transactions
       .filter((t) => formDate(t.date).startsWith(filterMonth))
@@ -195,7 +210,7 @@ const TrackingPage = () => {
       .reduce((sum, t) => sum + t.amount, 0);
   }, [transactions, filterMonth]);
 
-  const monthlyOtherExpensesTotal = useMemo(() => {
+  const monthlyOtherExpensesFromTransactions = useMemo(() => {
     if (!filterMonth) return 0;
     return transactions
       .filter((t) => formDate(t.date).startsWith(filterMonth))
@@ -206,28 +221,15 @@ const TrackingPage = () => {
       .reduce((sum, t) => sum + t.amount, 0);
   }, [transactions, filterMonth]);
 
-  const monthlySupplierPurchasesTotal = useMemo(() => {
-    if (!filterMonth) return 0;
-    return supplierTransactions
-      .filter((s) => formDate(s.date).startsWith(filterMonth))
-      .reduce((sum, s) => sum + s.total, 0);
-  }, [supplierTransactions, filterMonth]);
-
-  const monthlyTotalExpenses = useMemo(() => {
+  const monthlyTotalExpensesForCashTracking = useMemo(() => {
     return (
-      monthlyPurchasesTotal +
-      monthlyOtherExpensesTotal +
-      monthlySupplierPurchasesTotal
+      monthlyPurchasesFromTransactions + monthlyOtherExpensesFromTransactions
     );
-  }, [
-    monthlyPurchasesTotal,
-    monthlyOtherExpensesTotal,
-    monthlySupplierPurchasesTotal,
-  ]);
+  }, [monthlyPurchasesFromTransactions, monthlyOtherExpensesFromTransactions]);
 
   const monthlyProfit = useMemo(() => {
-    return monthlySalesTotal - monthlyTotalExpenses;
-  }, [monthlySalesTotal, monthlyTotalExpenses]);
+    return monthlySalesTotal - monthlyTotalExpensesForCashTracking;
+  }, [monthlySalesTotal, monthlyTotalExpensesForCashTracking]);
 
   const supplierTotals = useMemo(() => {
     const total = filteredSupplierTransactions.reduce(
@@ -365,6 +367,15 @@ const TrackingPage = () => {
             }}
           />
         </Box>
+        <Box sx={{ mb: 2 }}>
+          <TextField
+            label="Ara..."
+            fullWidth
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            sx={{ mt: 1 }}
+          />
+        </Box>
         {tab === 0 && (
           <>
             <Box
@@ -380,7 +391,8 @@ const TrackingPage = () => {
                 Günlük Satış: {dailySalesTotal.toFixed(2)} TL
               </Typography>
               <Typography color="error.main" fontWeight={600}>
-                Günlük Toplam Gider: {dailyTotalExpenses.toFixed(2)} TL
+                Günlük Toplam Gider:{" "}
+                {dailyTotalExpensesForCashTracking.toFixed(2)} TL
               </Typography>
               <Typography color="primary.main" fontWeight={600}>
                 Günlük Kâr/Zarar: {dailyProfit.toFixed(2)} TL
@@ -406,7 +418,8 @@ const TrackingPage = () => {
                   Aylık Satış: {monthlySalesTotal.toFixed(2)} TL
                 </Typography>
                 <Typography color="error.main" fontWeight={600}>
-                  Aylık Toplam Gider: {monthlyTotalExpenses.toFixed(2)} TL
+                  Aylık Toplam Gider:{" "}
+                  {monthlyTotalExpensesForCashTracking.toFixed(2)} TL
                 </Typography>
                 <Typography color="primary.main" fontWeight={600}>
                   Aylık Kâr/Zarar: {monthlyProfit.toFixed(2)} TL
@@ -483,7 +496,6 @@ const TrackingPage = () => {
                     <TableCell align="right">Tutar (TL)</TableCell>
                     <TableCell align="right">Ödenen (TL)</TableCell>
                     <TableCell align="right">Kalan (TL)</TableCell>
-                    <TableCell align="center">Ödeme Yöntemi</TableCell>
                     <TableCell align="center">İşlemler</TableCell>
                   </TableRow>
                 </TableHead>
@@ -498,9 +510,6 @@ const TrackingPage = () => {
                       <TableCell align="right">{r.paid.toFixed(2)}</TableCell>
                       <TableCell align="right">
                         {(r.total - r.paid).toFixed(2)}
-                      </TableCell>
-                      <TableCell align="center">
-                        {r.paymentMethod || "-"}
                       </TableCell>
                       <TableCell align="center">
                         <IconButton

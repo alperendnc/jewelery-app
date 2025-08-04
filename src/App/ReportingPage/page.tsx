@@ -51,6 +51,7 @@ const ReportingPage = () => {
     null
   );
   const [filterDate, setFilterDate] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
 
   useEffect(() => {
     async function fetchData() {
@@ -66,13 +67,38 @@ const ReportingPage = () => {
     fetchData();
   }, [getProducts, getSales, getPurchases]);
 
-  const filteredSales = salesReports.filter((r) =>
-    filterDate ? formDate(r.date).slice(0, 10) === filterDate : true
-  );
+  const filteredSales = salesReports.filter((r) => {
+    const dateMatches = filterDate
+      ? formDate(r.date).slice(0, 10) === filterDate
+      : true;
+    const searchMatches = searchQuery
+      ? r.productName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (r.customerName &&
+          r.customerName.toLowerCase().includes(searchQuery.toLowerCase())) ||
+        (r.paymentMethod &&
+          r.paymentMethod.toLowerCase().includes(searchQuery.toLowerCase()))
+      : true;
+    return dateMatches && searchMatches;
+  });
 
-  const filteredPurchases = purchaseReports.filter((r) =>
-    filterDate ? formDate(r.date).slice(0, 10) === filterDate : true
-  );
+  const filteredPurchases = purchaseReports.filter((r) => {
+    const dateMatches = filterDate
+      ? formDate(r.date).slice(0, 10) === filterDate
+      : true;
+    const searchMatches = searchQuery
+      ? r.productName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        r.customerName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (r.paymentMethod &&
+          r.paymentMethod.toLowerCase().includes(searchQuery.toLowerCase()))
+      : true;
+    return dateMatches && searchMatches;
+  });
+
+  const filteredStock = stockReports.filter((r) => {
+    return searchQuery
+      ? r.name.toLowerCase().includes(searchQuery.toLowerCase())
+      : true;
+  });
 
   const handleEdit = (type: "sale" | "purchase", data: any) => {
     setEditType(type);
@@ -108,7 +134,6 @@ const ReportingPage = () => {
       setSalesReports(await getSales());
     } else if (deleteType === "purchase") {
       await deletePurchase(deleteId);
-      setPurchaseReports(await getPurchases());
     }
 
     setDeleteId(null);
@@ -144,6 +169,14 @@ const ReportingPage = () => {
         </Tabs>
 
         <TextField
+          label="Ara"
+          fullWidth
+          sx={{ mb: 2 }}
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+        />
+
+        <TextField
           label="Tarih Filtrele"
           type="date"
           fullWidth
@@ -163,7 +196,7 @@ const ReportingPage = () => {
                 </TableRow>
               </TableHead>
               <TableBody>
-                {stockReports.map((r) => (
+                {filteredStock.map((r) => (
                   <TableRow key={r.id}>
                     <TableCell>{r.name}</TableCell>
                     <TableCell>{r.stock}</TableCell>
@@ -182,7 +215,7 @@ const ReportingPage = () => {
                   <TableCell>Tarih</TableCell>
                   <TableCell>Müşteri</TableCell>
                   <TableCell>Ürün</TableCell>
-                  <TableCell>Adet</TableCell>
+                  <TableCell>Gram</TableCell>
                   <TableCell>Tutar (TL)</TableCell>
                   <TableCell>Ödenen (TL)</TableCell>
                   <TableCell>Kalan (TL)</TableCell>
@@ -236,7 +269,7 @@ const ReportingPage = () => {
                     <TableCell>Tarih</TableCell>
                     <TableCell>Müşteri</TableCell>
                     <TableCell>Ürün</TableCell>
-                    <TableCell>Adet</TableCell>
+                    <TableCell>Gram</TableCell>
                     <TableCell>Tutar (TL)</TableCell>
                     <TableCell>Ödenen (TL)</TableCell>
                     <TableCell>Kalan (TL)</TableCell>
@@ -309,7 +342,7 @@ const ReportingPage = () => {
               fullWidth
             />
             <TextField
-              label="Adet"
+              label="Gram"
               type="number"
               value={editData.quantity ?? ""}
               onChange={(e) =>

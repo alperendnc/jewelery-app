@@ -34,7 +34,7 @@ import DeleteIcon from "@mui/icons-material/Delete";
 type StockItem = {
   id: string;
   name: string;
-  adet: number;
+  gram: number;
 };
 
 const initialCategories: string[] = [];
@@ -51,7 +51,7 @@ const StockPage = () => {
   const { enqueueSnackbar } = useSnackbar();
 
   const [stock, setStock] = useState<StockItem[]>([]);
-  const [inputAdetleri, setInputAdetleri] = useState<{
+  const [inputGrams, setInputGrams] = useState<{
     [name: string]: string;
   }>({});
   const [openAddDialog, setOpenAddDialog] = useState(false);
@@ -79,7 +79,6 @@ const StockPage = () => {
     gram: "",
     product: "",
     paid: "",
-    quantity: "",
   });
   const [productOptions, setProductOptions] = useState<string[]>([]);
   const [openPurchaseDialog, setOpenPurchaseDialog] = useState(false);
@@ -105,15 +104,15 @@ const StockPage = () => {
       const mapped = cleanedProducts.map((p: any) => ({
         id: p.id || "",
         name: p.name,
-        adet: p.stock,
+        gram: p.stock,
       }));
       setStock(mapped);
 
-      const adetObj: { [name: string]: string } = {};
+      const gramObj: { [name: string]: string } = {};
       cleanedProducts.forEach((item) => {
-        adetObj[item.name] = item.name.toString();
+        gramObj[item.name] = item.stock.toString();
       });
-      setInputAdetleri(adetObj);
+      setInputGrams(gramObj);
     }
     fetchProducts();
   }, [getProducts]);
@@ -157,25 +156,25 @@ const StockPage = () => {
     fetchSupplierTransactionsFromFirebase();
   }, []);
 
-  const handleInputChange = (name: string, value: string) => {
-    if (/^\d*$/.test(value)) {
-      setInputAdetleri((prev) => ({ ...prev, [name]: value }));
+  const handleGramInputChange = (name: string, value: string) => {
+    if (/^\d*$/.test(value) || value === "") {
+      setInputGrams((prev) => ({ ...prev, [name]: value }));
     }
   };
 
-  const handleSave = async (name: string) => {
-    const value = inputAdetleri[name];
+  const handleSaveGram = async (name: string) => {
+    const value = inputGrams[name];
     if (value === undefined || value === "" || isNaN(Number(value))) return;
 
     const existing = stock.find((item) => item.name === name);
 
     if (existing) {
-      const newStock = Number(value);
-      await updateProduct(existing.id, { stock: newStock });
+      const newGram = Number(value);
+      await updateProduct(existing.id, { stock: newGram });
     } else {
       await addProduct({
         name: name,
-        gram: 0,
+        gram: Number(value),
         price: 0,
         stock: Number(value),
       });
@@ -186,10 +185,12 @@ const StockPage = () => {
     const mapped = filtered.map((p: any) => ({
       id: p.id || "",
       name: p.name,
-      adet: p.stock,
+      gram: p.stock,
     }));
     setStock(mapped);
-    enqueueSnackbar(`${name} stoğu güncellendi.`, { variant: "success" });
+    enqueueSnackbar(`${name} gram bilgisi güncellendi.`, {
+      variant: "success",
+    });
   };
 
   const handleAddProduct = async () => {
@@ -202,7 +203,7 @@ const StockPage = () => {
 
     await addProduct({
       name: newProduct.name,
-      gram: 0,
+      gram: Number(newProduct.stock),
       price: 0,
       stock: Number(newProduct.stock),
     });
@@ -214,7 +215,7 @@ const StockPage = () => {
     const mapped = updatedProducts.map((p: any) => ({
       id: p.id || "",
       name: p.name,
-      adet: p.stock,
+      gram: p.stock,
     }));
     setStock(mapped);
 
@@ -334,14 +335,14 @@ const StockPage = () => {
 
     if (existingProduct) {
       await updateProduct(existingProduct.id, {
-        stock: existingProduct.adet + Number(newPurchase.quantity || 0),
+        stock: existingProduct.gram + Number(newPurchase.gram || 0),
       });
     } else {
       await addProduct({
         name: newPurchase.product,
-        gram: 0,
+        gram: Number(newPurchase.gram || 0),
         price: 0,
-        stock: Number(newPurchase.quantity || 0),
+        stock: Number(newPurchase.gram || 0),
       });
 
       const updatedProducts = await getProducts();
@@ -349,10 +350,10 @@ const StockPage = () => {
       setProductOptions(updatedProducts.map((p) => p.name));
 
       setStock(
-        updatedProducts.map((p) => ({
+        updatedProducts.map((p: any) => ({
           id: p.id || "",
           name: p.name,
-          adet: p.stock,
+          gram: p.stock,
         }))
       );
     }
@@ -360,7 +361,7 @@ const StockPage = () => {
     const newTransaction = {
       supplierName: newPurchase.supplierName,
       productName: newPurchase.product,
-      quantity: Number(newPurchase.quantity || 0),
+      quantity: Number(newPurchase.gram || 0),
       total: Number(newPurchase.gram) * Number(newPurchase.hasPrice),
       paid: Number(newPurchase.paid || 0),
       date: formDate(new Date().toISOString()),
@@ -390,7 +391,6 @@ const StockPage = () => {
       gram: "",
       product: "",
       paid: "",
-      quantity: "",
     });
     setOpenPurchaseDialog(false);
   };
@@ -463,18 +463,18 @@ const StockPage = () => {
                             {cat}
                           </TableCell>
                           <TableCell>
-                            Mevcut: {currentStock ? currentStock.adet : 0}
+                            Mevcut: {currentStock ? currentStock.gram : 0}
                           </TableCell>
                           <TableCell>
                             <TextField
                               size="small"
                               type="number"
-                              value={inputAdetleri[cat] || ""}
+                              value={inputGrams[cat] || ""}
                               onChange={(e) =>
-                                handleInputChange(cat, e.target.value)
+                                handleGramInputChange(cat, e.target.value)
                               }
                               inputProps={{ min: 0 }}
-                              placeholder="Adet gir"
+                              placeholder="Gram gir"
                               sx={{ width: 100 }}
                             />
                           </TableCell>
@@ -482,7 +482,7 @@ const StockPage = () => {
                             <Button
                               variant="contained"
                               size="small"
-                              onClick={() => handleSave(cat)}
+                              onClick={() => handleSaveGram(cat)}
                             >
                               Kaydet / Güncelle
                             </Button>
@@ -530,7 +530,6 @@ const StockPage = () => {
                 <Button
                   variant="contained"
                   onClick={() => setOpenPurchaseDialog(true)}
-                  sx={{ mb: 2 }}
                 >
                   Yeni Toptancı Alış
                 </Button>
@@ -602,7 +601,7 @@ const StockPage = () => {
             sx={{ mb: 2 }}
           />
           <TextField
-            label="Stok"
+            label="Gram"
             fullWidth
             type="number"
             value={newProduct.stock}
@@ -685,7 +684,7 @@ const StockPage = () => {
             renderInput={(params) => <TextField {...params} label="Ürün Adı" />}
           />
           <TextField
-            label="Adet"
+            label="Gram"
             type="number"
             value={
               newSupplierTransaction.quantity === 0
@@ -768,29 +767,31 @@ const StockPage = () => {
             }
           />
           <TextField
-            label="Has Fiyat"
+            label="Birim Fiyat"
             type="number"
             value={newPurchase.hasPrice}
             onChange={(e) => {
               handlePurchaseInputChange("hasPrice", e.target.value);
-              handlePurchaseInputChange(
-                "total",
-                (Number(newPurchase.gram) * Number(e.target.value)).toFixed(2)
-              );
+              const gramValue = Number(newPurchase.gram || 0);
+              const priceValue = Number(e.target.value || 0);
+              setNewPurchase((prev) => ({
+                ...prev,
+                total: (gramValue * priceValue).toFixed(2),
+              }));
             }}
           />
           <TextField
-            label="Gram"
+            label="Toplam Gram"
             type="number"
             value={newPurchase.gram}
             onChange={(e) => {
               handlePurchaseInputChange("gram", e.target.value);
-              handlePurchaseInputChange(
-                "total",
-                (Number(e.target.value) * Number(newPurchase.hasPrice)).toFixed(
-                  2
-                )
-              );
+              const gramValue = Number(e.target.value || 0);
+              const priceValue = Number(newPurchase.hasPrice || 0);
+              setNewPurchase((prev) => ({
+                ...prev,
+                total: (gramValue * priceValue).toFixed(2),
+              }));
             }}
           />
           <TextField
@@ -812,16 +813,6 @@ const StockPage = () => {
             }
             renderInput={(params) => <TextField {...params} label="Ürün" />}
           />
-
-          <TextField
-            label="Adet (Opsiyonel - Stok Güncelleme İçin)"
-            type="number"
-            value={newPurchase.quantity || ""}
-            onChange={(e) =>
-              handlePurchaseInputChange("quantity", e.target.value)
-            }
-          />
-
           <Box
             sx={{ display: "flex", justifyContent: "space-between", mb: 2 }}
           ></Box>

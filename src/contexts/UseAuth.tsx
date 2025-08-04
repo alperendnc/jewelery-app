@@ -210,7 +210,10 @@ export function AuthProvider({ children }: AuthProviderProps) {
         const [day, month, yearAndTime] = date.split("-");
         const [year, time] = yearAndTime.split("T");
         const isoString = `${year}-${month}-${day}${time ? "T" + time : ""}`;
-        return new Date(isoString).toISOString().slice(0, 10);
+        const parsedDate = new Date(isoString);
+        if (!isNaN(parsedDate.getTime())) {
+          return parsedDate.toISOString().slice(0, 10);
+        }
       }
 
       if (!isNaN(Date.parse(date))) {
@@ -409,7 +412,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     }
 
     const currentStock = (productDoc.data() as Product).stock || 0;
-    const newStock = currentStock - 1;
+    const newStock = currentStock - sale.quantity;
 
     if (newStock < 0) {
       throw new Error("Stok yetersiz!");
@@ -575,7 +578,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     const products = await getProducts();
     const product = products.find((p) => p.name === purchase.productName);
     if (product) {
-      const newStock = product.stock + 1;
+      const newStock = product.stock + purchase.quantity;
       await updateProduct(product.id!, { stock: newStock });
     }
   };

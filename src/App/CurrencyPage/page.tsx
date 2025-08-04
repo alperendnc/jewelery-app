@@ -34,6 +34,8 @@ const CurrencyPage = () => {
     }>
   >([]);
 
+  const [transactionSearchQuery, setTransactionSearchQuery] = useState("");
+
   useEffect(() => {
     const fetchTransactions = async () => {
       const data = await getCurrencyTransactions();
@@ -68,6 +70,16 @@ const CurrencyPage = () => {
     const rate = Number(transaction.rate);
     return amount && rate ? (amount * rate).toFixed(2) : "0.00";
   };
+
+  const filteredTransactions = transactions.filter((t) => {
+    const query = transactionSearchQuery.toLowerCase();
+    return (
+      t.name.toLowerCase().includes(query) ||
+      t.tc.toLowerCase().includes(query) ||
+      t.type.toLowerCase().includes(query) ||
+      t.date.toLowerCase().includes(query)
+    );
+  });
 
   return (
     <Box sx={{ mt: 4, display: "flex", justifyContent: "center" }}>
@@ -153,8 +165,17 @@ const CurrencyPage = () => {
             <Typography variant="h6" fontWeight={600} mb={2} align="center">
               Girilen İşlemler
             </Typography>
+
+            <TextField
+              label=" Ara"
+              fullWidth
+              sx={{ mb: 2 }}
+              value={transactionSearchQuery}
+              onChange={(e) => setTransactionSearchQuery(e.target.value)}
+            />
+
             <Box sx={{ maxHeight: "400px", overflowY: "auto" }}>
-              {transactions.map((t, index) => (
+              {filteredTransactions.map((t, index) => (
                 <Accordion key={index}>
                   <AccordionSummary expandIcon={<ExpandMoreIcon />}>
                     <Typography>{t.name}</Typography>
@@ -171,6 +192,16 @@ const CurrencyPage = () => {
                   </AccordionDetails>
                 </Accordion>
               ))}
+              {filteredTransactions.length === 0 && (
+                <Typography
+                  variant="body2"
+                  color="textSecondary"
+                  align="center"
+                  mt={2}
+                >
+                  Gösterilecek işlem bulunamadı.
+                </Typography>
+              )}
             </Box>
           </Box>
         </Box>
