@@ -9,6 +9,7 @@ import Navbar from "./components/Navbar";
 import MainPage from "./App/MainPage/page";
 import SellingPage from "./App/SellingPage/page";
 import StockPage from "./App/StockPage/page";
+import CurrencyPage from "./App/CurrencyPage/page";
 import CustomerPage from "./App/CustomerPage/page";
 import TrackingPage from "./App/TrackingPage/page";
 import ReportingPage from "./App/ReportingPage/page";
@@ -45,6 +46,7 @@ const App = () => (
               <Route path="/stock" element={<StockPage />} />
               <Route path="/customer" element={<CustomerPage />} />
               <Route path="/track" element={<TrackingPage />} />
+              <Route path="/currency" element={<CurrencyPage />} />
               <Route path="/report" element={<ReportingPage />} />
             </Routes>
           </Box>

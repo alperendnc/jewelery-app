@@ -20,47 +20,42 @@ const sections = [
   {
     title: "Stok ve Ürün Yönetimi",
     icon: <DiamondIcon color="primary" sx={{ fontSize: 40 }} />,
-    items: [
-      "Ürün Ekle / Güncelle / Sil",
-      "Stok Takibi",
-      "Ürün Bilgileri (Gramaj, Ayar, Fiyat)",
-    ],
+    items: ["Ürün Ekle", "Ürün Güncelle", "Ürün Sil"],
     button: { text: "Ürün Ekle", color: "primary" },
     onClick: "/stock",
   },
   {
     title: "Satış ve Fatura Takibi",
     icon: <ReceiptIcon color="secondary" sx={{ fontSize: 40 }} />,
-    items: ["Satış Yap", "Fatura Oluştur", "Satış Raporları"],
+    items: ["Satış Yap", "Alış Yap", "Müşteri Oluştur"],
     button: { text: "Satış Yap", color: "secondary" },
     onClick: "/satis",
   },
   {
     title: "Müşteri Yönetimi",
     icon: <PeopleIcon color="success" sx={{ fontSize: 40 }} />,
-    items: [
-      "Müşteri Ekle / Güncelle",
-      "Borç / Alacak Takibi",
-      "Müşteri İşlem Geçmişi",
-    ],
+    items: ["Müşteri Ekle", "Müşteri Güncelle", "Müşteri Sil"],
     button: { text: "Müşteri Ekle", color: "success" },
     onClick: "/customer",
   },
   {
     title: "Kasa ve Finans Takibi",
     icon: <MonetizationOnIcon color="warning" sx={{ fontSize: 40 }} />,
-    items: [
-      "Kasa Hareketleri",
-      "Gelir / Gider Raporları",
-      "Nakit / Kredi Kartı İşlemleri",
-    ],
+    items: ["Kasa Hareketleri", "Tedarikçi İşlemleri"],
     button: { text: "Kasa İşlemleri", color: "warning" },
     onClick: "/track",
   },
   {
+    title: "Döviz İşlemleri",
+    icon: <MonetizationOnIcon color="success" sx={{ fontSize: 40 }} />,
+    items: ["Döviz Alış", "Döviz Satış", "Kur Takibi"],
+    button: { text: "Döviz İşlemleri", color: "success" },
+    onClick: "/currency",
+  },
+  {
     title: "Raporlama",
     icon: <AssessmentIcon color="info" sx={{ fontSize: 40 }} />,
-    items: ["Stok Raporları", "Satış Raporları", "Kâr / Zarar Analizi"],
+    items: ["Stok Raporları", "Satış Raporları ", "Alış Raporları"],
     button: { text: "Raporlar", color: "info" },
     onClick: "/report",
   },
@@ -73,7 +68,6 @@ const MainPage = () => {
       sx={{
         minHeight: "100vh",
         py: { xs: 2, sm: 4, md: 6 },
-        overflowX: "auto",
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
@@ -82,11 +76,16 @@ const MainPage = () => {
       <Container maxWidth={false} sx={{ px: { xs: 0, sm: 2 } }}>
         <Box
           sx={{
-            display: "flex",
+            display: "grid",
+            gridTemplateColumns: {
+              xs: "1fr",
+              sm: "repeat(2, 1fr)",
+              md: "repeat(3, 1fr)",
+            },
             gap: 3,
             justifyContent: "center",
-            alignItems: "stretch",
-            flexWrap: "wrap",
+            alignItems: "center",
+            justifyItems: "center",
           }}
         >
           {sections.map((section) => (
@@ -97,8 +96,8 @@ const MainPage = () => {
                 p: { xs: 2, sm: 3 },
                 borderRadius: 4,
                 flex: "1 1 240px",
-                minWidth: 220,
-                maxWidth: 260,
+                minWidth: "260px",
+                height: "320px",
                 display: "flex",
                 flexDirection: "column",
                 alignItems: "center",

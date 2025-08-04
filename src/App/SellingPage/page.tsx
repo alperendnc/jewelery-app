@@ -31,8 +31,7 @@ function SellingPage() {
   const [hasFiyat, setHasFiyat] = useState("");
   const [gram, setGram] = useState("");
   const [total, setTotal] = useState("");
-  const [sellMultiplier, setSellMultiplier] = useState(945);
-  const [paymentMethod, setPaymentMethod] = useState<"Nakit" | "IBAN" | "Post">(
+  const [paymentMethod, setPaymentMethod] = useState<"Nakit" | "IBAN" | "Pos">(
     "Nakit"
   );
   const [paidAmount, setPaidAmount] = useState("0");
@@ -44,32 +43,11 @@ function SellingPage() {
   const [buyHasFiyat, setBuyHasFiyat] = useState("");
   const [buyGram, setBuyGram] = useState("");
   const [buyTotal, setBuyTotal] = useState("");
-  const [buyMultiplier, setBuyMultiplier] = useState(905);
   const [buyPaymentMethod, setBuyPaymentMethod] = useState<
-    "Nakit" | "IBAN" | "Post"
+    "Nakit" | "IBAN" | "Pos"
   >("Nakit");
   const [buyPaidAmount, setBuyPaidAmount] = useState("0");
   const [isBuyPaidInFull, setIsBuyPaidInFull] = useState(false);
-
-  const productMultipliers: Record<string, number> = {
-    "22 Bilezik": 945,
-    "Ata Altın": 8820,
-    "Reşat Altın": 1007,
-    "14 Takı": 670,
-    "24 Ayar": 950,
-    "22 Ayar": 945,
-    "22 Takı": 680,
-  };
-
-  const buyProductMultipliers: Record<string, number> = {
-    "22 Bilezik": 905,
-    "Ata Altın": 8820,
-    "Reşat Altın": 997,
-    "14 Takı": 655,
-    "24 Ayar": 910,
-    "22 Ayar": 905,
-    "22 Takı": 680,
-  };
 
   useEffect(() => {
     async function fetchStockProducts() {
@@ -89,9 +67,9 @@ function SellingPage() {
   useEffect(() => {
     const fiyat = parseFloat(hasFiyat) || 0;
     const miktar = parseFloat(gram) || 0;
-    const calculatedTotal = fiyat * sellMultiplier * miktar;
+    const calculatedTotal = fiyat * miktar;
     setTotal(calculatedTotal > 0 ? calculatedTotal.toFixed(2) : "");
-  }, [hasFiyat, gram, sellMultiplier]);
+  }, [hasFiyat, gram]);
 
   useEffect(() => {
     if (isPaidInFull) {
@@ -102,9 +80,9 @@ function SellingPage() {
   useEffect(() => {
     const fiyat = parseFloat(buyHasFiyat) || 0;
     const miktar = parseFloat(buyGram) || 0;
-    const calculatedBuyTotal = fiyat * buyMultiplier * miktar;
+    const calculatedBuyTotal = fiyat * miktar;
     setBuyTotal(calculatedBuyTotal > 0 ? calculatedBuyTotal.toFixed(2) : "");
-  }, [buyHasFiyat, buyGram, buyMultiplier]);
+  }, [buyHasFiyat, buyGram]);
 
   useEffect(() => {
     if (isBuyPaidInFull) {
@@ -184,7 +162,6 @@ function SellingPage() {
         },
       });
       enqueueSnackbar("Satış başarıyla kaydedildi!", { variant: "success" });
-
       setCustomerName("");
       setCustomerTC("");
       setProduct("");
@@ -231,6 +208,7 @@ function SellingPage() {
         quantity: parseFloat(buyGram),
         paid: parseFloat(buyPaidAmount),
         date: getLocalDateTime(),
+        soldItem: products.find((p) => p.id === buyProduct)?.name || "",
       });
 
       await addPurchases({
@@ -241,10 +219,10 @@ function SellingPage() {
         paid: parseFloat(buyPaidAmount),
         date: getLocalDateTime(),
         paymentMethod: buyPaymentMethod,
+        boughtItem: products.find((p) => p.id === buyProduct)?.name || "",
       });
 
       enqueueSnackbar("Alış başarıyla kaydedildi!", { variant: "success" });
-
       setBuyCustomerName("");
       setBuyCustomerTC("");
       setBuyProduct("");
@@ -308,12 +286,6 @@ function SellingPage() {
                     onChange={(e: SelectChangeEvent<string>) => {
                       const selectedProductId = e.target.value;
                       setProduct(selectedProductId);
-                      const productName = products.find(
-                        (p) => p.id === selectedProductId
-                      )?.name;
-                      if (productName && productMultipliers[productName]) {
-                        setSellMultiplier(productMultipliers[productName]);
-                      }
                     }}
                   >
                     {products.map((prod) => (
@@ -341,9 +313,7 @@ function SellingPage() {
                   }
                   InputProps={{
                     endAdornment: (
-                      <InputAdornment position="end">
-                        {sellMultiplier}
-                      </InputAdornment>
+                      <InputAdornment position="end">TL</InputAdornment>
                     ),
                   }}
                   fullWidth
@@ -375,13 +345,13 @@ function SellingPage() {
                     label="Ödeme Yöntemi"
                     onChange={(e) =>
                       setPaymentMethod(
-                        e.target.value as "Nakit" | "IBAN" | "Post"
+                        e.target.value as "Nakit" | "IBAN" | "Pos"
                       )
                     }
                   >
                     <MenuItem value="Nakit">Nakit</MenuItem>
                     <MenuItem value="IBAN">IBAN</MenuItem>
-                    <MenuItem value="Post">Post</MenuItem>
+                    <MenuItem value="Pos">Pos</MenuItem>
                   </Select>
                 </FormControl>
               </Grid>
@@ -491,12 +461,6 @@ function SellingPage() {
                     onChange={(e: SelectChangeEvent<string>) => {
                       const selectedProductId = e.target.value;
                       setBuyProduct(selectedProductId);
-                      const productName = products.find(
-                        (p) => p.id === selectedProductId
-                      )?.name;
-                      if (productName && buyProductMultipliers[productName]) {
-                        setBuyMultiplier(buyProductMultipliers[productName]);
-                      }
                     }}
                   >
                     {products.map((prod) => (
@@ -524,9 +488,7 @@ function SellingPage() {
                   }
                   InputProps={{
                     endAdornment: (
-                      <InputAdornment position="end">
-                        {buyMultiplier}
-                      </InputAdornment>
+                      <InputAdornment position="end">TL</InputAdornment>
                     ),
                   }}
                   fullWidth
@@ -558,13 +520,13 @@ function SellingPage() {
                     label="Ödeme Yöntemi"
                     onChange={(e) =>
                       setBuyPaymentMethod(
-                        e.target.value as "Nakit" | "IBAN" | "Post"
+                        e.target.value as "Nakit" | "IBAN" | "Pos"
                       )
                     }
                   >
                     <MenuItem value="Nakit">Nakit</MenuItem>
                     <MenuItem value="IBAN">IBAN</MenuItem>
-                    <MenuItem value="Post">Post</MenuItem>
+                    <MenuItem value="Pos">Pos</MenuItem>
                   </Select>
                 </FormControl>
               </Grid>

@@ -44,8 +44,9 @@ export interface Purchase {
   paid: number;
   date: string;
   debt?: number;
-  paymentMethod?: "Nakit" | "IBAN" | "Post";
+  paymentMethod?: "Nakit" | "IBAN" | "Pos";
   customer?: Omit<Customer, "id" | "createdAt">;
+  boughtItem?: string;
 }
 
 export interface Customer {
@@ -56,6 +57,7 @@ export interface Customer {
   quantity?: number;
   total?: string | number;
   soldItem?: string;
+  boughtItem?: string;
   paid?: number;
   debt?: number;
   date?: string | Timestamp;
@@ -69,7 +71,7 @@ export interface SupplierTransaction {
   total: number;
   paid: number;
   date: string;
-  paymentMethod?: "Nakit" | "IBAN" | "Post";
+  paymentMethod?: "Nakit" | "IBAN" | "Pos";
 }
 
 export interface Sale {
@@ -83,7 +85,7 @@ export interface Sale {
   total: number;
   date: string | Timestamp;
   customer?: Omit<Customer, "id" | "createdAt">;
-  paymentMethod?: "Nakit" | "IBAN" | "Post";
+  paymentMethod?: "Nakit" | "IBAN" | "Pos";
 }
 
 export interface Transaction {
@@ -92,7 +94,19 @@ export interface Transaction {
   description: string;
   amount: number;
   date: string;
-  method: "Nakit" | "Kredi Kartı" | "Post";
+  method: "Nakit" | "Kredi Kartı" | "Pos";
+}
+
+export interface CurrencyTransaction {
+  id?: string;
+  name: string;
+  tc: string;
+  amount: number;
+  paid: number;
+  rate: number;
+  type: string;
+  date: string;
+  total: number;
 }
 
 interface AuthContextType {
@@ -139,6 +153,15 @@ interface AuthContextType {
   login: (email: string, password: string) => Promise<User>;
   logout: () => Promise<void>;
   loading: boolean;
+  addCurrencyTransaction: (
+    transaction: Omit<CurrencyTransaction, "id">
+  ) => Promise<void>;
+  getCurrencyTransactions: () => Promise<CurrencyTransaction[]>;
+  deleteCurrencyTransaction: (id: string) => Promise<void>;
+  updateCurrencyTransaction: (
+    id: string,
+    updatedFields: Partial<CurrencyTransaction>
+  ) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -174,7 +197,6 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const formatDateToYYYYMMDD = (
     date: string | Timestamp | Date | undefined
   ): string => {
-    console.log("GELEN DATE:", date);
     if (!date) return "";
 
     if (date instanceof Timestamp) {
@@ -489,6 +511,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       description: `${purchase.customerName} - ${purchase.productName} alım`,
       amount: purchase.paid,
       date: formatDateToYYYYMMDD(purchase.date),
+
       method: purchase.paymentMethod || "Nakit",
     });
 
@@ -516,8 +539,10 @@ export function AuthProvider({ children }: AuthProviderProps) {
           customerDocRef = doc(collection(db, "customers"));
           currentCustomerData = {
             name: purchase.customer.name,
+            boughtItem: purchase.productName,
             tc: purchase.customer.tc,
             phone: purchase.customer.phone,
+
             createdAt: new Date(),
             debt: 0,
           };
@@ -536,6 +561,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
           {
             ...currentCustomerData,
             soldItem: purchase.productName,
+            boughtItem: purchase.productName,
             total: purchase.total,
             paid: purchase.paid,
             debt: newDebt,
@@ -552,6 +578,40 @@ export function AuthProvider({ children }: AuthProviderProps) {
       const newStock = product.stock + 1;
       await updateProduct(product.id!, { stock: newStock });
     }
+  };
+
+  const addCurrencyTransaction = async (
+    transaction: Omit<CurrencyTransaction, "id">
+  ) => {
+    await addDoc(collection(db, "currencyTransactions"), {
+      ...transaction,
+      date: formatDateToYYYYMMDD(transaction.date),
+    });
+  };
+
+  const getCurrencyTransactions = async (): Promise<CurrencyTransaction[]> => {
+    const snapshot = await getDocs(collection(db, "currencyTransactions"));
+    return snapshot.docs.map((doc) => {
+      const data = doc.data() as CurrencyTransaction;
+      return {
+        ...data,
+        id: doc.id,
+        date: formatDateToYYYYMMDD(data.date),
+      };
+    });
+  };
+  const deleteCurrencyTransaction = async (id: string) => {
+    await deleteDoc(doc(db, "currencyTransactions", id));
+  };
+  const updateCurrencyTransaction = async (
+    id: string,
+    updatedFields: Partial<CurrencyTransaction>
+  ) => {
+    const ref = doc(db, "currencyTransactions", id);
+    if (updatedFields.date) {
+      updatedFields.date = formatDateToYYYYMMDD(updatedFields.date);
+    }
+    await setDoc(ref, updatedFields, { merge: true });
   };
 
   return (
@@ -589,6 +649,10 @@ export function AuthProvider({ children }: AuthProviderProps) {
         getSupplierTransactions,
         deleteSupplierTransaction,
         updateSupplierTransaction,
+        addCurrencyTransaction,
+        getCurrencyTransactions,
+        deleteCurrencyTransaction,
+        updateCurrencyTransaction,
       }}
     >
       {!loading && children}

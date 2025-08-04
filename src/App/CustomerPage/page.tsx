@@ -185,13 +185,12 @@ const CustomerPage = () => {
                             <TableRow>
                               <TableCell>Ad Soyad</TableCell>
                               <TableCell>T.C.</TableCell>
-                              <TableCell>Telefon</TableCell>
                               <TableCell>Son Alışveriş</TableCell>
                               <TableCell>Toplam Satış Tutarı (TL)</TableCell>
                               <TableCell>Toplam Ödenen (TL)</TableCell>
                               <TableCell>Kalan Borç (TL)</TableCell>
                               <TableCell>Tarih</TableCell>
-                              <TableCell align="center">İşlemler</TableCell>
+                              <TableCell>İşlemler</TableCell>
                             </TableRow>
                           </TableHead>
                           <TableBody>
@@ -229,24 +228,6 @@ const CustomerPage = () => {
                                     />
                                   ) : (
                                     customer.tc
-                                  )}
-                                </TableCell>
-                                <TableCell>
-                                  {editId === customer.id ? (
-                                    <TextField
-                                      value={editCustomer.phone}
-                                      onChange={(e) =>
-                                        setEditCustomer({
-                                          ...editCustomer,
-                                          phone: e.target.value
-                                            .replace(/\D/g, "")
-                                            .slice(0, 11),
-                                        })
-                                      }
-                                      size="small"
-                                    />
-                                  ) : (
-                                    customer.phone
                                   )}
                                 </TableCell>
                                 <TableCell>
@@ -337,7 +318,23 @@ const CustomerPage = () => {
                                     customer.date || "-"
                                   )}
                                 </TableCell>
-                                <TableCell align="center">
+                                <TableCell>
+                                  {editId === customer.id ? (
+                                    <TextField
+                                      value={editCustomer.boughtItem}
+                                      onChange={(e) =>
+                                        setEditCustomer({
+                                          ...editCustomer,
+                                          boughtItem: e.target.value,
+                                        })
+                                      }
+                                      size="small"
+                                    />
+                                  ) : (
+                                    customer.boughtItem || "-"
+                                  )}
+                                </TableCell>
+                                <TableCell align="center" sx={{ p: 0 }}>
                                   {editId === customer.id ? (
                                     <>
                                       <Button

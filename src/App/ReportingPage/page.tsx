@@ -362,10 +362,7 @@ const ReportingPage = () => {
                   onChange={(e) =>
                     setEditData({
                       ...editData,
-                      paymentMethod: e.target.value as
-                        | "Nakit"
-                        | "IBAN"
-                        | "Post",
+                      paymentMethod: e.target.value as "Nakit" | "IBAN" | "Pos",
                     })
                   }
                   fullWidth
@@ -389,10 +386,7 @@ const ReportingPage = () => {
                   onChange={(e) =>
                     setEditData({
                       ...editData,
-                      paymentMethod: e.target.value as
-                        | "Nakit"
-                        | "IBAN"
-                        | "Post",
+                      paymentMethod: e.target.value as "Nakit" | "IBAN" | "Pos",
                     })
                   }
                   fullWidth

@@ -26,16 +26,17 @@ import {
 import MoneyIcon from "@mui/icons-material/AttachMoney";
 import EditIcon from "@mui/icons-material/Edit";
 import DeleteIcon from "@mui/icons-material/Delete";
-import AddIcon from "@mui/icons-material/Add";
 import {
   useAuth,
   Transaction,
   SupplierTransaction,
+  CurrencyTransaction,
 } from "src/contexts/UseAuth";
 import formDate from "src/components/formDate";
 
 type EditTransactionData = Partial<Omit<Transaction, "id">>;
 type EditSupplierTransactionData = Partial<Omit<SupplierTransaction, "id">>;
+type EditCurrencyTransactionData = Partial<Omit<CurrencyTransaction, "id">>;
 
 const TrackingPage = () => {
   const [tab, setTab] = useState(0);
@@ -46,40 +47,34 @@ const TrackingPage = () => {
     getSupplierTransactions,
     updateSupplierTransaction,
     deleteSupplierTransaction,
-    addSupplierTransaction,
+    getCurrencyTransactions,
+    updateCurrencyTransaction,
+    deleteCurrencyTransaction,
   } = useAuth();
 
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [supplierTransactions, setSupplierTransactions] = useState<
     SupplierTransaction[]
   >([]);
+  const [currencyTransactions, setCurrencyTransactions] = useState<
+    CurrencyTransaction[]
+  >([]);
   const [filterDate, setFilterDate] = useState("");
   const [filterMonth, setFilterMonth] = useState("");
 
   const [editId, setEditId] = useState<string | null>(null);
   const [editType, setEditType] = useState<
-    "transaction" | "supplierTransaction" | null
+    "transaction" | "supplierTransaction" | "currencyTransaction" | null
   >(null);
   const [editData, setEditData] = useState<
-    EditTransactionData | EditSupplierTransactionData
+    | EditTransactionData
+    | EditSupplierTransactionData
+    | EditCurrencyTransactionData
   >({});
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [deleteType, setDeleteType] = useState<
-    "transaction" | "supplierTransaction" | null
+    "transaction" | "supplierTransaction" | "currencyTransaction" | null
   >(null);
-
-  const [addSupplierDialogOpen, setAddSupplierDialogOpen] = useState(false);
-  const [newSupplierTransaction, setNewSupplierTransaction] = useState<
-    Omit<SupplierTransaction, "id">
-  >({
-    supplierName: "",
-    productName: "",
-    quantity: 0,
-    total: 0,
-    paid: 0,
-    date: formDate(Date()),
-    paymentMethod: "Nakit",
-  });
 
   useEffect(() => {
     async function fetchData() {
@@ -87,9 +82,16 @@ const TrackingPage = () => {
       setTransactions(fetchedTransactions);
       const fetchedSupplierTransactions = await getSupplierTransactions();
       setSupplierTransactions(fetchedSupplierTransactions);
+      const fetchedCurrencyTransactions = await getCurrencyTransactions();
+      setCurrencyTransactions(fetchedCurrencyTransactions);
     }
     fetchData();
-  }, [getTransactions, getSupplierTransactions]);
+  }, [getTransactions, getSupplierTransactions, getCurrencyTransactions]);
+
+  useEffect(() => {
+    const today = new Date().toISOString().split("T")[0];
+    setFilterDate(today);
+  }, []);
 
   const filteredTransactions = useMemo(() => {
     return transactions.filter((t) => {
@@ -117,6 +119,19 @@ const TrackingPage = () => {
     });
   }, [supplierTransactions, filterDate, filterMonth]);
 
+  const filteredCurrencyTransactions = useMemo(() => {
+    return currencyTransactions.filter((c) => {
+      const currencyTransactionDate = formDate(c.date);
+      if (filterDate) {
+        return currencyTransactionDate.startsWith(filterDate);
+      }
+      if (filterMonth) {
+        return currencyTransactionDate.startsWith(filterMonth);
+      }
+      return true;
+    });
+  }, [currencyTransactions, filterDate, filterMonth]);
+
   const dailySalesTotal = useMemo(() => {
     return filteredTransactions
       .filter((t) => t.type === "Giriş")
@@ -141,9 +156,25 @@ const TrackingPage = () => {
       .reduce((sum, t) => sum + t.amount, 0);
   }, [filteredTransactions]);
 
+  const dailySupplierPurchasesTotal = useMemo(() => {
+    return filteredSupplierTransactions.reduce((sum, s) => sum + s.total, 0);
+  }, [filteredSupplierTransactions]);
+
+  const dailyTotalExpenses = useMemo(() => {
+    return (
+      dailyPurchasesTotal +
+      dailyOtherExpensesTotal +
+      dailySupplierPurchasesTotal
+    );
+  }, [
+    dailyPurchasesTotal,
+    dailyOtherExpensesTotal,
+    dailySupplierPurchasesTotal,
+  ]);
+
   const dailyProfit = useMemo(() => {
-    return dailySalesTotal - dailyPurchasesTotal - dailyOtherExpensesTotal;
-  }, [dailySalesTotal, dailyPurchasesTotal, dailyOtherExpensesTotal]);
+    return dailySalesTotal - dailyTotalExpenses;
+  }, [dailySalesTotal, dailyTotalExpenses]);
 
   const monthlySalesTotal = useMemo(() => {
     if (!filterMonth) return 0;
@@ -175,11 +206,28 @@ const TrackingPage = () => {
       .reduce((sum, t) => sum + t.amount, 0);
   }, [transactions, filterMonth]);
 
-  const monthlyProfit = useMemo(() => {
+  const monthlySupplierPurchasesTotal = useMemo(() => {
+    if (!filterMonth) return 0;
+    return supplierTransactions
+      .filter((s) => formDate(s.date).startsWith(filterMonth))
+      .reduce((sum, s) => sum + s.total, 0);
+  }, [supplierTransactions, filterMonth]);
+
+  const monthlyTotalExpenses = useMemo(() => {
     return (
-      monthlySalesTotal - monthlyPurchasesTotal - monthlyOtherExpensesTotal
+      monthlyPurchasesTotal +
+      monthlyOtherExpensesTotal +
+      monthlySupplierPurchasesTotal
     );
-  }, [monthlySalesTotal, monthlyPurchasesTotal, monthlyOtherExpensesTotal]);
+  }, [
+    monthlyPurchasesTotal,
+    monthlyOtherExpensesTotal,
+    monthlySupplierPurchasesTotal,
+  ]);
+
+  const monthlyProfit = useMemo(() => {
+    return monthlySalesTotal - monthlyTotalExpenses;
+  }, [monthlySalesTotal, monthlyTotalExpenses]);
 
   const supplierTotals = useMemo(() => {
     const total = filteredSupplierTransactions.reduce(
@@ -193,8 +241,20 @@ const TrackingPage = () => {
     return { total, paid, debt: total - paid };
   }, [filteredSupplierTransactions]);
 
+  const currencyTotals = useMemo(() => {
+    const totalAmount = filteredCurrencyTransactions.reduce(
+      (sum, c) => sum + c.amount,
+      0
+    );
+    const totalTL = filteredCurrencyTransactions.reduce(
+      (sum, c) => sum + c.total,
+      0
+    );
+    return { totalAmount, totalTL };
+  }, [filteredCurrencyTransactions]);
+
   const handleEdit = (
-    type: "transaction" | "supplierTransaction",
+    type: "transaction" | "supplierTransaction" | "currencyTransaction",
     data: any
   ) => {
     setEditType(type);
@@ -205,50 +265,54 @@ const TrackingPage = () => {
   const handleUpdate = async () => {
     if (!editId || !editType) return;
 
-    if (editType === "transaction") {
-      await updateTransaction(editId, editData as Omit<Transaction, "id">);
-      setTransactions(await getTransactions());
-    } else if (editType === "supplierTransaction") {
-      await updateSupplierTransaction(
-        editId,
-        editData as Omit<SupplierTransaction, "id">
-      );
-      setSupplierTransactions(await getSupplierTransactions());
+    try {
+      if (editType === "transaction") {
+        await updateTransaction(editId, editData as Omit<Transaction, "id">);
+        setTransactions(await getTransactions());
+      } else if (editType === "supplierTransaction") {
+        await updateSupplierTransaction(
+          editId,
+          editData as Omit<SupplierTransaction, "id">
+        );
+        setSupplierTransactions(await getSupplierTransactions());
+      } else if (editType === "currencyTransaction") {
+        await updateCurrencyTransaction(
+          editId,
+          editData as Omit<CurrencyTransaction, "id">
+        );
+        setCurrencyTransactions(await getCurrencyTransactions());
+      }
+      alert("Kayıt başarıyla güncellendi!");
+    } catch (error) {
+      console.error("Kayıt güncellenirken hata:", error);
+    } finally {
+      setEditId(null);
+      setEditType(null);
+      setEditData({});
     }
-
-    setEditId(null);
-    setEditType(null);
-    setEditData({});
   };
 
   const handleDelete = async () => {
     if (!deleteId || !deleteType) return;
 
-    if (deleteType === "transaction") {
-      await deleteTransaction(deleteId);
-      setTransactions(await getTransactions());
-    } else if (deleteType === "supplierTransaction") {
-      await deleteSupplierTransaction(deleteId);
-      setSupplierTransactions(await getSupplierTransactions());
+    try {
+      if (deleteType === "transaction") {
+        await deleteTransaction(deleteId);
+        setTransactions(await getTransactions());
+      } else if (deleteType === "supplierTransaction") {
+        await deleteSupplierTransaction(deleteId);
+        setSupplierTransactions(await getSupplierTransactions());
+      } else if (deleteType === "currencyTransaction") {
+        await deleteCurrencyTransaction(deleteId);
+        setCurrencyTransactions(await getCurrencyTransactions());
+      }
+      alert("Kayıt başarıyla silindi!");
+    } catch (error) {
+      console.error("Kayıt silinirken hata:", error);
+    } finally {
+      setDeleteId(null);
+      setDeleteType(null);
     }
-
-    setDeleteId(null);
-    setDeleteType(null);
-  };
-
-  const handleAddSupplierTransaction = async () => {
-    await addSupplierTransaction(newSupplierTransaction);
-    setSupplierTransactions(await getSupplierTransactions());
-    setAddSupplierDialogOpen(false);
-    setNewSupplierTransaction({
-      supplierName: "",
-      productName: "",
-      quantity: 0,
-      total: 0,
-      paid: 0,
-      date: formDate(Date()),
-      paymentMethod: "Nakit",
-    });
   };
 
   return (
@@ -267,7 +331,6 @@ const TrackingPage = () => {
             Kasa ve Finans Takibi
           </Typography>
         </Box>
-
         <Tabs
           value={tab}
           onChange={(_, v) => setTab(v)}
@@ -276,8 +339,8 @@ const TrackingPage = () => {
         >
           <Tab label="Kasa ve Finans Takibi" />
           <Tab label="Toptancı İşlemleri" />
+          <Tab label="Döviz İşlemleri" />
         </Tabs>
-
         <Box sx={{ display: "flex", gap: 2, mb: 2 }}>
           <TextField
             label="Gün Filtrele"
@@ -302,7 +365,6 @@ const TrackingPage = () => {
             }}
           />
         </Box>
-
         {tab === 0 && (
           <>
             <Box
@@ -318,13 +380,10 @@ const TrackingPage = () => {
                 Günlük Satış: {dailySalesTotal.toFixed(2)} TL
               </Typography>
               <Typography color="error.main" fontWeight={600}>
-                Günlük Alış: {dailyPurchasesTotal.toFixed(2)} TL
+                Günlük Toplam Gider: {dailyTotalExpenses.toFixed(2)} TL
               </Typography>
               <Typography color="primary.main" fontWeight={600}>
-                Kâr: {dailyProfit.toFixed(2)} TL
-              </Typography>
-              <Typography color="warning.main" fontWeight={600}>
-                Günlük Diğer Giderler: {dailyOtherExpensesTotal.toFixed(2)} TL
+                Günlük Kâr/Zarar: {dailyProfit.toFixed(2)} TL
               </Typography>
             </Box>
 
@@ -347,14 +406,10 @@ const TrackingPage = () => {
                   Aylık Satış: {monthlySalesTotal.toFixed(2)} TL
                 </Typography>
                 <Typography color="error.main" fontWeight={600}>
-                  Aylık Alış: {monthlyPurchasesTotal.toFixed(2)} TL
+                  Aylık Toplam Gider: {monthlyTotalExpenses.toFixed(2)} TL
                 </Typography>
                 <Typography color="primary.main" fontWeight={600}>
-                  Aylık Kâr: {monthlyProfit.toFixed(2)} TL
-                </Typography>
-                <Typography color="warning.main" fontWeight={600}>
-                  Aylık Diğer Giderler: {monthlyOtherExpensesTotal.toFixed(2)}{" "}
-                  TL
+                  Aylık Kâr/Zarar: {monthlyProfit.toFixed(2)} TL
                 </Typography>
               </Box>
             )}
@@ -403,18 +458,8 @@ const TrackingPage = () => {
             </TableContainer>
           </>
         )}
-
         {tab === 1 && (
           <>
-            <Box sx={{ display: "flex", justifyContent: "flex-end", mb: 2 }}>
-              <Button
-                variant="contained"
-                startIcon={<AddIcon />}
-                onClick={() => setAddSupplierDialogOpen(true)}
-              >
-                Yeni Alış Ekle
-              </Button>
-            </Box>
             <Box sx={{ display: "flex", gap: 4, mb: 2 }}>
               <Typography color="primary.main" fontWeight={600}>
                 Toplam Alış: {supplierTotals.total.toFixed(2)} TL
@@ -481,7 +526,65 @@ const TrackingPage = () => {
             </TableContainer>
           </>
         )}
+        {tab === 2 && (
+          <>
+            <Box sx={{ display: "flex", gap: 4, mb: 2 }}>
+              <Typography color="primary.main" fontWeight={600}>
+                Toplam Döviz Miktarı: {currencyTotals.totalAmount.toFixed(2)}
+              </Typography>
+              <Typography color="success.main" fontWeight={600}>
+                Toplam TL Karşılığı: {currencyTotals.totalTL.toFixed(2)} TL
+              </Typography>
+            </Box>
 
+            <TableContainer>
+              <Table>
+                <TableHead>
+                  <TableRow>
+                    <TableCell>Tarih</TableCell>
+                    <TableCell>Adı</TableCell>
+                    <TableCell>TC</TableCell>
+                    <TableCell>Döviz Tipi</TableCell>
+                    <TableCell align="right">Miktar</TableCell>
+                    <TableCell align="right">Kur</TableCell>
+                    <TableCell align="right">Toplam TL</TableCell>
+                    <TableCell align="center">İşlemler</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {filteredCurrencyTransactions.map((r) => (
+                    <TableRow key={r.id}>
+                      <TableCell>{formDate(r.date)}</TableCell>
+                      <TableCell>{r.name}</TableCell>
+                      <TableCell>{r.tc}</TableCell>
+                      <TableCell>{r.type}</TableCell>
+                      <TableCell align="right">{r.amount.toFixed(2)}</TableCell>
+                      <TableCell align="right">{r.rate.toFixed(4)}</TableCell>
+                      <TableCell align="right">{r.total.toFixed(2)}</TableCell>
+                      <TableCell align="center">
+                        <IconButton
+                          size="small"
+                          onClick={() => handleEdit("currencyTransaction", r)}
+                        >
+                          <EditIcon />
+                        </IconButton>
+                        <IconButton
+                          size="small"
+                          onClick={() => {
+                            setDeleteType("currencyTransaction");
+                            setDeleteId(r.id as string);
+                          }}
+                        >
+                          <DeleteIcon color="error" />
+                        </IconButton>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          </>
+        )}
         <Dialog
           open={!!editId}
           onClose={() => {
@@ -495,7 +598,9 @@ const TrackingPage = () => {
           <DialogTitle>
             {editType === "transaction"
               ? "İşlem Kaydını Düzenle"
-              : "Toptancı İşlemi Kaydını Düzenle"}
+              : editType === "supplierTransaction"
+              ? "Toptancı İşlemi Kaydını Düzenle"
+              : "Döviz İşlemi Kaydını Düzenle"}{" "}
           </DialogTitle>
           <DialogContent
             sx={{ display: "flex", flexDirection: "column", gap: 2, mt: 1 }}
@@ -553,49 +658,18 @@ const TrackingPage = () => {
                         method: e.target.value as
                           | "Nakit"
                           | "Kredi Kartı"
-                          | "Post",
+                          | "Pos",
                       })
                     }
                   >
                     <MenuItem value="Nakit">Nakit</MenuItem>
                     <MenuItem value="Kredi Kartı">Kredi Kartı</MenuItem>
-                    <MenuItem value="Post">Post</MenuItem>
+                    <MenuItem value="Pos">Pos</MenuItem>
                   </Select>
                 </FormControl>
               </>
-            ) : (
+            ) : editType === "supplierTransaction" ? (
               <>
-                <TextField
-                  label="Toptancı"
-                  value={
-                    (editData as EditSupplierTransactionData).supplierName || ""
-                  }
-                  onChange={(e) =>
-                    setEditData({ ...editData, supplierName: e.target.value })
-                  }
-                />
-                <TextField
-                  label="Ürün"
-                  value={
-                    (editData as EditSupplierTransactionData).productName || ""
-                  }
-                  onChange={(e) =>
-                    setEditData({ ...editData, productName: e.target.value })
-                  }
-                />
-                <TextField
-                  label="Adet"
-                  type="number"
-                  value={
-                    (editData as EditSupplierTransactionData).quantity ?? ""
-                  }
-                  onChange={(e) =>
-                    setEditData({
-                      ...editData,
-                      quantity: Number(e.target.value),
-                    })
-                  }
-                />
                 <TextField
                   label="Tutar"
                   type="number"
@@ -621,29 +695,63 @@ const TrackingPage = () => {
                     setEditData({ ...editData, date: e.target.value })
                   }
                 />
-                <FormControl fullWidth>
-                  <InputLabel>Ödeme Yöntemi</InputLabel>
-                  <Select
-                    label="Ödeme Yöntemi"
-                    value={
-                      (editData as EditSupplierTransactionData).paymentMethod ||
-                      ""
-                    }
-                    onChange={(e) =>
-                      setEditData({
-                        ...editData,
-                        paymentMethod: e.target.value as
-                          | "Nakit"
-                          | "IBAN"
-                          | "Post",
-                      })
-                    }
-                  >
-                    <MenuItem value="Nakit">Nakit</MenuItem>
-                    <MenuItem value="IBAN">IBAN</MenuItem>
-                    <MenuItem value="Post">Post</MenuItem>
-                  </Select>
-                </FormControl>
+              </>
+            ) : (
+              <>
+                <TextField
+                  label="Adı"
+                  value={(editData as EditCurrencyTransactionData).name || ""}
+                  onChange={(e) =>
+                    setEditData({ ...editData, name: e.target.value })
+                  }
+                />
+                <TextField
+                  label="TC"
+                  value={(editData as EditCurrencyTransactionData).tc || ""}
+                  onChange={(e) =>
+                    setEditData({ ...editData, tc: e.target.value })
+                  }
+                />
+                <TextField
+                  label="Miktar"
+                  type="number"
+                  value={(editData as EditCurrencyTransactionData).amount ?? ""}
+                  onChange={(e) =>
+                    setEditData({ ...editData, amount: Number(e.target.value) })
+                  }
+                />
+                <TextField
+                  label="Kur"
+                  type="number"
+                  value={(editData as EditCurrencyTransactionData).rate ?? ""}
+                  onChange={(e) =>
+                    setEditData({ ...editData, rate: Number(e.target.value) })
+                  }
+                />
+                <TextField
+                  label="Tip"
+                  value={(editData as EditCurrencyTransactionData).type || ""}
+                  onChange={(e) =>
+                    setEditData({ ...editData, type: e.target.value })
+                  }
+                />
+                <TextField
+                  label="Tarih"
+                  type="date"
+                  InputLabelProps={{ shrink: true }}
+                  value={(editData as EditCurrencyTransactionData).date || ""}
+                  onChange={(e) =>
+                    setEditData({ ...editData, date: e.target.value })
+                  }
+                />
+                <TextField
+                  label="Toplam TL"
+                  type="number"
+                  value={(editData as EditCurrencyTransactionData).total ?? ""}
+                  onChange={(e) =>
+                    setEditData({ ...editData, total: Number(e.target.value) })
+                  }
+                />
               </>
             )}
           </DialogContent>
@@ -662,7 +770,6 @@ const TrackingPage = () => {
             </Button>
           </DialogActions>
         </Dialog>
-
         <Dialog
           open={!!deleteId}
           onClose={() => {
@@ -685,121 +792,6 @@ const TrackingPage = () => {
             </Button>
             <Button color="error" onClick={handleDelete}>
               Sil
-            </Button>
-          </DialogActions>
-        </Dialog>
-
-        <Dialog
-          open={addSupplierDialogOpen}
-          onClose={() => setAddSupplierDialogOpen(false)}
-          maxWidth="sm"
-          fullWidth
-        >
-          <DialogTitle>Yeni Toptancı Alışı Ekle</DialogTitle>
-          <DialogContent
-            sx={{ display: "flex", flexDirection: "column", gap: 2, mt: 1 }}
-          >
-            <TextField
-              label="Toptancı Adı"
-              value={newSupplierTransaction.supplierName}
-              onChange={(e) =>
-                setNewSupplierTransaction({
-                  ...newSupplierTransaction,
-                  supplierName: e.target.value,
-                })
-              }
-            />
-            <TextField
-              label="Ürün Adı"
-              value={newSupplierTransaction.productName}
-              onChange={(e) =>
-                setNewSupplierTransaction({
-                  ...newSupplierTransaction,
-                  productName: e.target.value,
-                })
-              }
-            />
-            <TextField
-              label="Adet"
-              type="number"
-              value={
-                newSupplierTransaction.quantity === 0
-                  ? ""
-                  : newSupplierTransaction.quantity
-              }
-              onChange={(e) =>
-                setNewSupplierTransaction({
-                  ...newSupplierTransaction,
-                  quantity: Number(e.target.value),
-                })
-              }
-            />
-            <TextField
-              label="Toplam Tutar"
-              type="number"
-              value={
-                newSupplierTransaction.total === 0
-                  ? ""
-                  : newSupplierTransaction.total
-              }
-              onChange={(e) =>
-                setNewSupplierTransaction({
-                  ...newSupplierTransaction,
-                  total: Number(e.target.value),
-                })
-              }
-            />
-            <TextField
-              label="Ödenen Tutar"
-              type="number"
-              value={
-                newSupplierTransaction.paid === 0
-                  ? ""
-                  : newSupplierTransaction.paid
-              }
-              onChange={(e) =>
-                setNewSupplierTransaction({
-                  ...newSupplierTransaction,
-                  paid: Number(e.target.value),
-                })
-              }
-            />
-            <TextField
-              label="Tarih"
-              type="date"
-              InputLabelProps={{ shrink: true }}
-              value={newSupplierTransaction.date}
-              onChange={(e) =>
-                setNewSupplierTransaction({
-                  ...newSupplierTransaction,
-                  date: e.target.value,
-                })
-              }
-            />
-            <FormControl fullWidth>
-              <InputLabel>Ödeme Yöntemi</InputLabel>
-              <Select
-                label="Ödeme Yöntemi"
-                value={newSupplierTransaction.paymentMethod}
-                onChange={(e) =>
-                  setNewSupplierTransaction({
-                    ...newSupplierTransaction,
-                    paymentMethod: e.target.value as "Nakit" | "IBAN" | "Post",
-                  })
-                }
-              >
-                <MenuItem value="Nakit">Nakit</MenuItem>
-                <MenuItem value="IBAN">IBAN</MenuItem>
-                <MenuItem value="Post">Post</MenuItem>
-              </Select>
-            </FormControl>
-          </DialogContent>
-          <DialogActions>
-            <Button onClick={() => setAddSupplierDialogOpen(false)}>
-              İptal
-            </Button>
-            <Button variant="contained" onClick={handleAddSupplierTransaction}>
-              Ekle
             </Button>
           </DialogActions>
         </Dialog>
