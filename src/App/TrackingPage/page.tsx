@@ -23,6 +23,7 @@ import {
   InputLabel,
   FormControl,
 } from "@mui/material";
+
 import MoneyIcon from "@mui/icons-material/AttachMoney";
 import EditIcon from "@mui/icons-material/Edit";
 import DeleteIcon from "@mui/icons-material/Delete";
@@ -59,8 +60,10 @@ const TrackingPage = () => {
   const [currencyTransactions, setCurrencyTransactions] = useState<
     CurrencyTransaction[]
   >([]);
+
   const [filterDate, setFilterDate] = useState("");
   const [filterMonth, setFilterMonth] = useState("");
+
   const [searchQuery, setSearchQuery] = useState("");
 
   const [editId, setEditId] = useState<string | null>(null);
@@ -85,45 +88,70 @@ const TrackingPage = () => {
       setSupplierTransactions(fetchedSupplierTransactions);
       const fetchedCurrencyTransactions = await getCurrencyTransactions();
       setCurrencyTransactions(fetchedCurrencyTransactions);
+
+      console.log("--- Firebase'den Çekilen Veriler ---");
+      console.log("Transactions (Kasa İşlemleri):", fetchedTransactions);
+      console.log(
+        "Supplier Transactions (Toptancı İşlemleri):",
+        fetchedSupplierTransactions
+      );
+      console.log(
+        "Currency Transactions (Döviz İşlemleri):",
+        fetchedCurrencyTransactions
+      );
+      console.log("-------------------------------------");
     }
     fetchData();
   }, [getTransactions, getSupplierTransactions, getCurrencyTransactions]);
 
-  useEffect(() => {
-    const today = new Date().toISOString().split("T")[0];
-    setFilterDate(today);
-  }, []);
+  const safeFormDate = (date: string | undefined): string => {
+    return date ? formDate(date) : "";
+  };
 
   const filteredTransactions = useMemo(() => {
     const lowerCaseQuery = searchQuery.toLowerCase();
+    const filterValue = filterDate || filterMonth;
+
     return transactions.filter((t) => {
-      const transactionDate = formDate(t.date);
-      const matchesDate = filterDate
-        ? transactionDate.startsWith(filterDate)
-        : true;
-      const matchesMonth = filterMonth
-        ? transactionDate.startsWith(filterMonth)
-        : true;
+      const transactionDate = safeFormDate(t.date);
+
+      let matchesDateOrMonth = true;
+
+      if (filterValue) {
+        if (filterDate) {
+          matchesDateOrMonth = transactionDate === filterValue;
+        } else if (filterMonth) {
+          matchesDateOrMonth = transactionDate.startsWith(filterValue);
+        }
+      }
+
       const matchesSearch =
         t.description.toLowerCase().includes(lowerCaseQuery) ||
         t.type.toLowerCase().includes(lowerCaseQuery) ||
         t.amount.toString().includes(lowerCaseQuery) ||
         t.method.toLowerCase().includes(lowerCaseQuery);
 
-      return matchesDate && matchesMonth && matchesSearch;
+      return matchesDateOrMonth && matchesSearch;
     });
   }, [transactions, filterDate, filterMonth, searchQuery]);
 
   const filteredSupplierTransactions = useMemo(() => {
     const lowerCaseQuery = searchQuery.toLowerCase();
+    const filterValue = filterDate || filterMonth;
+
     return supplierTransactions.filter((s) => {
-      const supplierTransactionDate = formDate(s.date);
-      const matchesDate = filterDate
-        ? supplierTransactionDate.startsWith(filterDate)
-        : true;
-      const matchesMonth = filterMonth
-        ? supplierTransactionDate.startsWith(filterMonth)
-        : true;
+      const transactionDate = safeFormDate(s.date);
+
+      let matchesDateOrMonth = true;
+
+      if (filterValue) {
+        if (filterDate) {
+          matchesDateOrMonth = transactionDate === filterValue;
+        } else if (filterMonth) {
+          matchesDateOrMonth = transactionDate.startsWith(filterValue);
+        }
+      }
+
       const matchesSearch =
         s.supplierName.toLowerCase().includes(lowerCaseQuery) ||
         s.productName.toLowerCase().includes(lowerCaseQuery) ||
@@ -133,20 +161,27 @@ const TrackingPage = () => {
         (s.paymentMethod &&
           s.paymentMethod.toLowerCase().includes(lowerCaseQuery));
 
-      return matchesDate && matchesMonth && matchesSearch;
+      return matchesDateOrMonth && matchesSearch;
     });
   }, [supplierTransactions, filterDate, filterMonth, searchQuery]);
 
   const filteredCurrencyTransactions = useMemo(() => {
     const lowerCaseQuery = searchQuery.toLowerCase();
+    const filterValue = filterDate || filterMonth;
+
     return currencyTransactions.filter((c) => {
-      const currencyTransactionDate = formDate(c.date);
-      const matchesDate = filterDate
-        ? currencyTransactionDate.startsWith(filterDate)
-        : true;
-      const matchesMonth = filterMonth
-        ? currencyTransactionDate.startsWith(filterMonth)
-        : true;
+      const transactionDate = safeFormDate(c.date);
+
+      let matchesDateOrMonth = true;
+
+      if (filterValue) {
+        if (filterDate) {
+          matchesDateOrMonth = transactionDate === filterValue;
+        } else if (filterMonth) {
+          matchesDateOrMonth = transactionDate.startsWith(filterValue);
+        }
+      }
+
       const matchesSearch =
         c.name.toLowerCase().includes(lowerCaseQuery) ||
         c.tc.toLowerCase().includes(lowerCaseQuery) ||
@@ -155,37 +190,21 @@ const TrackingPage = () => {
         c.rate.toString().includes(lowerCaseQuery) ||
         c.total.toString().includes(lowerCaseQuery);
 
-      return matchesDate && matchesMonth && matchesSearch;
+      return matchesDateOrMonth && matchesSearch;
     });
   }, [currencyTransactions, filterDate, filterMonth, searchQuery]);
 
   const dailySalesTotal = useMemo(() => {
     return filteredTransactions
-      .filter((t) => t.type === "Giriş")
-      .reduce((sum, t) => sum + t.amount, 0);
-  }, [filteredTransactions]);
-
-  const dailyPurchasesFromTransactions = useMemo(() => {
-    return filteredTransactions
-      .filter(
-        (t) =>
-          t.type === "Çıkış" && t.description?.toLowerCase().includes("alım")
-      )
-      .reduce((sum, t) => sum + t.amount, 0);
-  }, [filteredTransactions]);
-
-  const dailyOtherExpensesFromTransactions = useMemo(() => {
-    return filteredTransactions
-      .filter(
-        (t) =>
-          t.type === "Çıkış" && !t.description?.toLowerCase().includes("alım")
-      )
+      .filter((t) => t.type === "Satış")
       .reduce((sum, t) => sum + t.amount, 0);
   }, [filteredTransactions]);
 
   const dailyTotalExpensesForCashTracking = useMemo(() => {
-    return dailyPurchasesFromTransactions + dailyOtherExpensesFromTransactions;
-  }, [dailyPurchasesFromTransactions, dailyOtherExpensesFromTransactions]);
+    return filteredTransactions
+      .filter((t) => t.type === "Alış")
+      .reduce((sum, t) => sum + t.amount, 0);
+  }, [filteredTransactions]);
 
   const dailyProfit = useMemo(() => {
     return dailySalesTotal - dailyTotalExpensesForCashTracking;
@@ -194,38 +213,18 @@ const TrackingPage = () => {
   const monthlySalesTotal = useMemo(() => {
     if (!filterMonth) return 0;
     return transactions
-      .filter((t) => formDate(t.date).startsWith(filterMonth))
-      .filter((t) => t.type === "Giriş")
-      .reduce((sum, t) => sum + t.amount, 0);
-  }, [transactions, filterMonth]);
-
-  const monthlyPurchasesFromTransactions = useMemo(() => {
-    if (!filterMonth) return 0;
-    return transactions
-      .filter((t) => formDate(t.date).startsWith(filterMonth))
-      .filter(
-        (t) =>
-          t.type === "Çıkış" && t.description?.toLowerCase().includes("alım")
-      )
-      .reduce((sum, t) => sum + t.amount, 0);
-  }, [transactions, filterMonth]);
-
-  const monthlyOtherExpensesFromTransactions = useMemo(() => {
-    if (!filterMonth) return 0;
-    return transactions
-      .filter((t) => formDate(t.date).startsWith(filterMonth))
-      .filter(
-        (t) =>
-          t.type === "Çıkış" && !t.description?.toLowerCase().includes("alım")
-      )
+      .filter((t) => safeFormDate(t.date).startsWith(filterMonth))
+      .filter((t) => t.type === "Satış")
       .reduce((sum, t) => sum + t.amount, 0);
   }, [transactions, filterMonth]);
 
   const monthlyTotalExpensesForCashTracking = useMemo(() => {
-    return (
-      monthlyPurchasesFromTransactions + monthlyOtherExpensesFromTransactions
-    );
-  }, [monthlyPurchasesFromTransactions, monthlyOtherExpensesFromTransactions]);
+    if (!filterMonth) return 0;
+    return transactions
+      .filter((t) => safeFormDate(t.date).startsWith(filterMonth))
+      .filter((t) => t.type === "Alış")
+      .reduce((sum, t) => sum + t.amount, 0);
+  }, [transactions, filterMonth]);
 
   const monthlyProfit = useMemo(() => {
     return monthlySalesTotal - monthlyTotalExpensesForCashTracking;
@@ -261,7 +260,7 @@ const TrackingPage = () => {
   ) => {
     setEditType(type);
     setEditId(data.id);
-    setEditData({ ...data, date: formDate(data.date) });
+    setEditData({ ...data, date: data.date ? formDate(data.date) : "" });
   };
 
   const handleUpdate = async () => {
@@ -343,7 +342,7 @@ const TrackingPage = () => {
           <Tab label="Toptancı İşlemleri" />
           <Tab label="Döviz İşlemleri" />
         </Tabs>
-        <Box sx={{ display: "flex", gap: 2, mb: 2 }}>
+        <Box sx={{ display: "flex", gap: 2, mb: 2, flexWrap: "wrap" }}>
           <TextField
             label="Gün Filtrele"
             type="date"
@@ -352,7 +351,9 @@ const TrackingPage = () => {
             value={filterDate}
             onChange={(e) => {
               setFilterDate(e.target.value);
-              setFilterMonth("");
+              if (e.target.value) {
+                setFilterMonth("");
+              }
             }}
           />
           <TextField
@@ -363,10 +364,13 @@ const TrackingPage = () => {
             value={filterMonth}
             onChange={(e) => {
               setFilterMonth(e.target.value);
-              setFilterDate("");
+              if (e.target.value) {
+                setFilterDate("");
+              }
             }}
           />
         </Box>
+
         <Box sx={{ mb: 2 }}>
           <TextField
             label="Ara..."
@@ -376,6 +380,7 @@ const TrackingPage = () => {
             sx={{ mt: 1 }}
           />
         </Box>
+
         {tab === 0 && (
           <>
             <Box
@@ -445,7 +450,9 @@ const TrackingPage = () => {
                       <TableCell>{r.type}</TableCell>
                       <TableCell>{r.description}</TableCell>
                       <TableCell align="right">{r.amount.toFixed(2)}</TableCell>
-                      <TableCell align="center">{formDate(r.date)}</TableCell>
+                      <TableCell align="center">
+                        {safeFormDate(r.date)}
+                      </TableCell>
                       <TableCell align="center">{r.method}</TableCell>
                       <TableCell align="center">
                         <IconButton
@@ -502,7 +509,7 @@ const TrackingPage = () => {
                 <TableBody>
                   {filteredSupplierTransactions.map((r) => (
                     <TableRow key={r.id}>
-                      <TableCell>{formDate(r.date)}</TableCell>
+                      <TableCell>{safeFormDate(r.date)}</TableCell>
                       <TableCell>{r.supplierName}</TableCell>
                       <TableCell>{r.productName}</TableCell>
                       <TableCell>{r.quantity}</TableCell>
@@ -563,7 +570,7 @@ const TrackingPage = () => {
                 <TableBody>
                   {filteredCurrencyTransactions.map((r) => (
                     <TableRow key={r.id}>
-                      <TableCell>{formDate(r.date)}</TableCell>
+                      <TableCell>{safeFormDate(r.date)}</TableCell>
                       <TableCell>{r.name}</TableCell>
                       <TableCell>{r.tc}</TableCell>
                       <TableCell>{r.type}</TableCell>
@@ -624,12 +631,12 @@ const TrackingPage = () => {
                     onChange={(e) =>
                       setEditData({
                         ...editData,
-                        type: e.target.value as "Giriş" | "Çıkış",
+                        type: e.target.value as "Satış" | "Alış",
                       })
                     }
                   >
-                    <MenuItem value="Giriş">Giriş</MenuItem>
-                    <MenuItem value="Çıkış">Çıkış</MenuItem>
+                    <MenuItem value="Alış">Alış</MenuItem>
+                    <MenuItem value="Satış">Satış</MenuItem>
                   </Select>
                 </FormControl>
                 <TextField

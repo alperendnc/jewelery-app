@@ -5,7 +5,7 @@ import {
   Typography,
   TextField,
   Button,
-  Grid,
+  Grid as MuiGrid,
   InputAdornment,
   MenuItem,
   Select,
@@ -18,45 +18,50 @@ import {
 import { useAuth } from "src/contexts/UseAuth";
 import { useSnackbar } from "notistack";
 
+type TransactionType = "Satış" | "Alış";
+
+interface ProductItem {
+  id: string;
+  name: string;
+}
+
 function SellingPage() {
+  const Grid: any = MuiGrid;
+
   const { addSale, addPurchases, getProducts, addCustomer } = useAuth();
   const { enqueueSnackbar } = useSnackbar();
 
-  const [products, setProducts] = useState<{ id: string; name: string }[]>([]);
+  const [products, setProducts] = useState<ProductItem[]>([]);
+  const [transactionType, setTransactionType] =
+    useState<TransactionType>("Satış");
 
   const [customerName, setCustomerName] = useState("");
   const [customerTC, setCustomerTC] = useState("");
+  const [customerPhone, setCustomerPhone] = useState("");
   const [product, setProduct] = useState("");
-  const [ayar, setAyar] = useState("");
   const [hasFiyat, setHasFiyat] = useState("");
   const [gram, setGram] = useState("");
+  const [carpanDegeri, setCarpanDegeri] = useState("1");
   const [total, setTotal] = useState("");
   const [paymentMethod, setPaymentMethod] = useState<"Nakit" | "IBAN" | "Pos">(
     "Nakit"
   );
   const [paidAmount, setPaidAmount] = useState("0");
   const [isPaidInFull, setIsPaidInFull] = useState(false);
-  const [buyCustomerName, setBuyCustomerName] = useState("");
-  const [buyCustomerTC, setBuyCustomerTC] = useState("");
-  const [buyProduct, setBuyProduct] = useState("");
-  const [buyAyar, setBuyAyar] = useState("");
-  const [buyHasFiyat, setBuyHasFiyat] = useState("");
-  const [buyGram, setBuyGram] = useState("");
-  const [buyTotal, setBuyTotal] = useState("");
-  const [buyPaymentMethod, setBuyPaymentMethod] = useState<
-    "Nakit" | "IBAN" | "Pos"
-  >("Nakit");
-  const [buyPaidAmount, setBuyPaidAmount] = useState("0");
-  const [isBuyPaidInFull, setIsBuyPaidInFull] = useState(false);
 
   useEffect(() => {
     async function fetchStockProducts() {
       try {
-        const prods = await getProducts();
-        setProducts(prods.map((p) => ({ id: p.id || "", name: p.name })));
+        const fetchedProducts = await getProducts();
+        setProducts(
+          fetchedProducts.map((p) => ({
+            id: p.id!,
+            name: p.name,
+          }))
+        );
       } catch (error) {
-        console.error("Ürünler yüklenemedi", error);
-        enqueueSnackbar("Ürünler yüklenirken bir hata oluştu.", {
+        console.error("Ürünler çekilemedi:", error);
+        enqueueSnackbar("Ürün listesi yüklenirken bir hata oluştu.", {
           variant: "error",
         });
       }
@@ -67,29 +72,21 @@ function SellingPage() {
   useEffect(() => {
     const fiyat = parseFloat(hasFiyat) || 0;
     const miktar = parseFloat(gram) || 0;
-    const calculatedTotal = fiyat * miktar;
+    const carpan = parseFloat(carpanDegeri) || 1;
+
+    const calculatedTotal = fiyat * carpan * miktar;
     setTotal(calculatedTotal > 0 ? calculatedTotal.toFixed(2) : "");
-  }, [hasFiyat, gram]);
+  }, [hasFiyat, gram, carpanDegeri]);
 
   useEffect(() => {
     if (isPaidInFull) {
       setPaidAmount(total);
+    } else if (paidAmount === total && total !== "") {
+      setIsPaidInFull(true);
+    } else if (isPaidInFull && paidAmount !== total) {
+      setPaidAmount(total);
     }
-  }, [total, isPaidInFull]);
-
-  useEffect(() => {
-    const fiyat = parseFloat(buyHasFiyat) || 0;
-    const miktar = parseFloat(buyGram) || 0;
-    const calculatedBuyTotal = fiyat * miktar;
-    setBuyTotal(calculatedBuyTotal > 0 ? calculatedBuyTotal.toFixed(2) : "");
-  }, [buyHasFiyat, buyGram]);
-
-  useEffect(() => {
-    if (isBuyPaidInFull) {
-      setBuyPaidAmount(buyTotal);
-    }
-  }, [buyTotal, isBuyPaidInFull]);
-
+  }, [total, isPaidInFull, paidAmount]);
   const getLocalDateTime = () => {
     const now = new Date();
     return now
@@ -103,497 +100,424 @@ function SellingPage() {
         hour12: false,
       })
       .replace(/\./g, "-")
-      .replace(/ /g, "T");
+      .replace(/, /g, "T");
   };
 
-  const handleSell = async () => {
-    try {
-      if (
-        !customerName ||
-        !customerTC ||
-        !product ||
-        !hasFiyat ||
-        !gram ||
-        !total ||
-        !paidAmount
-      ) {
-        enqueueSnackbar("Lütfen tüm satış alanlarını doldurun.", {
-          variant: "warning",
-        });
-        return;
-      }
-      if (parseFloat(paidAmount) > parseFloat(total)) {
-        enqueueSnackbar("Ödenen tutar, toplam tutardan fazla olamaz.", {
-          variant: "warning",
-        });
-        return;
-      }
+  const resetForm = () => {
+    setCustomerName("");
+    setCustomerTC("");
+    setCustomerPhone("");
+    setProduct("");
+    setHasFiyat("");
+    setGram("");
+    setCarpanDegeri("1");
+    setTotal("");
+    setPaymentMethod("Nakit");
+    setPaidAmount("0");
+    setIsPaidInFull(false);
+  };
 
-      await addCustomer({
-        name: customerName,
-        tc: customerTC,
-        phone: "",
-        soldItem: products.find((p) => p.id === product)?.name || "",
-        total: parseFloat(total),
-        quantity: parseFloat(gram),
-        paid: parseFloat(paidAmount),
-        date: getLocalDateTime(),
+  const changeTransactionType = (type: TransactionType) => {
+    setTransactionType(type);
+    resetForm();
+  };
+
+  const handleTransaction = async () => {
+    const productName = products.find((p) => p.id === product)?.name || "";
+
+    if (
+      !customerName ||
+      !customerTC ||
+      !product ||
+      !hasFiyat ||
+      !gram ||
+      !total ||
+      !paidAmount ||
+      !carpanDegeri
+    ) {
+      enqueueSnackbar("Lütfen tüm zorunlu alanları doldurun.", {
+        variant: "warning",
       });
+      return;
+    }
 
-      await addSale({
-        productId: product,
-        productName: products.find((p) => p.id === product)?.name || "",
-        customerId: "",
-        customerName,
-        quantity: parseFloat(gram),
-        total: parseFloat(total),
-        paid: parseFloat(paidAmount),
-        date: getLocalDateTime(),
-        paymentMethod,
-        customer: {
-          name: customerName,
-          tc: customerTC,
-          phone: "",
-          soldItem: products.find((p) => p.id === product)?.name || "",
-          total: parseFloat(total),
-          quantity: parseFloat(gram),
-          paid: parseFloat(paidAmount),
+    const paid = parseFloat(paidAmount);
+    const totalAmount = parseFloat(total);
+    const quantity = parseFloat(gram);
+
+    if (paid > totalAmount) {
+      enqueueSnackbar("Ödenen tutar, toplam tutardan fazla olamaz.", {
+        variant: "warning",
+      });
+      return;
+    }
+
+    try {
+      if (transactionType === "Satış") {
+        await addSale({
+          productId: product,
+          productName: productName,
+          customerId: "",
+          customerName,
+          quantity,
+          total: totalAmount,
+          paid,
           date: getLocalDateTime(),
-        },
-      });
-      enqueueSnackbar("Satış başarıyla kaydedildi!", { variant: "success" });
-      setCustomerName("");
-      setCustomerTC("");
-      setProduct("");
-      setAyar("");
-      setHasFiyat("");
-      setGram("");
-      setTotal("");
-      setPaymentMethod("Nakit");
-      setPaidAmount("0");
-      setIsPaidInFull(false);
+          paymentMethod,
+          customer: {
+            name: customerName,
+            tc: customerTC,
+            phone: customerPhone,
+          },
+        });
+        enqueueSnackbar("Satış başarıyla kaydedildi!", { variant: "success" });
+      } else if (transactionType === "Alış") {
+        await addPurchases({
+          productName: productName,
+          customerName,
+          quantity,
+          total: totalAmount,
+          paid,
+          date: getLocalDateTime(),
+          paymentMethod,
+          boughtItem: productName,
+          customer: {
+            name: customerName,
+            tc: customerTC,
+            phone: customerPhone,
+          },
+        });
+        enqueueSnackbar("Alış başarıyla kaydedildi!", { variant: "success" });
+      }
+
+      resetForm();
     } catch (error) {
-      enqueueSnackbar("Satış kaydedilirken hata oluştu.", { variant: "error" });
-      console.error("Satış hatası:", error);
+      enqueueSnackbar(
+        `${transactionType} kaydedilirken hata oluştu. ${
+          error instanceof Error ? error.message : ""
+        }`,
+        {
+          variant: "error",
+        }
+      );
+      console.error(`${transactionType} hatası:`, error);
     }
   };
 
-  const handleBuy = async () => {
-    try {
-      if (
-        !buyCustomerName ||
-        !buyCustomerTC ||
-        !buyProduct ||
-        !buyHasFiyat ||
-        !buyGram ||
-        !buyTotal ||
-        !buyPaidAmount
-      ) {
-        enqueueSnackbar("Lütfen tüm alış alanlarını doldurun.", {
-          variant: "warning",
-        });
-        return;
-      }
-      if (parseFloat(buyPaidAmount) > parseFloat(buyTotal)) {
-        enqueueSnackbar("Ödenen tutar, toplam tutardan fazla olamaz.", {
-          variant: "warning",
-        });
-        return;
-      }
-
-      await addCustomer({
-        name: buyCustomerName,
-        tc: buyCustomerTC,
-        total: parseFloat(buyTotal),
-        quantity: parseFloat(buyGram),
-        paid: parseFloat(buyPaidAmount),
-        date: getLocalDateTime(),
-        soldItem: products.find((p) => p.id === buyProduct)?.name || "",
-      });
-
-      await addPurchases({
-        productName: products.find((p) => p.id === buyProduct)?.name || "",
-        customerName: buyCustomerName,
-        quantity: parseFloat(buyGram),
-        total: parseFloat(buyTotal),
-        paid: parseFloat(buyPaidAmount),
-        date: getLocalDateTime(),
-        paymentMethod: buyPaymentMethod,
-        boughtItem: products.find((p) => p.id === buyProduct)?.name || "",
-      });
-
-      enqueueSnackbar("Alış başarıyla kaydedildi!", { variant: "success" });
-      setBuyCustomerName("");
-      setBuyCustomerTC("");
-      setBuyProduct("");
-      setBuyAyar("");
-      setBuyHasFiyat("");
-      setBuyGram("");
-      setBuyTotal("");
-      setBuyPaymentMethod("Nakit");
-      setBuyPaidAmount("0");
-      setIsBuyPaidInFull(false);
-    } catch (error) {
-      enqueueSnackbar("Alış kaydedilirken hata oluştu.", { variant: "error" });
-      console.error("Alış hatası:", error);
-    }
+  const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const input = e.target.value.replace(/\D/g, "");
+    setCustomerPhone(input);
   };
 
   return (
-    <Box sx={{ mt: 4, display: "flex", justifyContent: "center" }}>
+    <Box sx={{ py: 4, display: "flex", justifyContent: "center" }}>
       <Grid
         container
         spacing={4}
         justifyContent="center"
-        alignItems="stretch"
-        sx={{ maxWidth: 1200, flexWrap: { xs: "wrap", md: "nowrap" } }}
+        sx={{ maxWidth: 1000 }}
       >
-        <Grid sx={{ display: "flex" }}>
-          {" "}
-          <Paper sx={{ p: 4, borderRadius: 4, width: "100%", flex: 1 }}>
-            <Typography variant="h6" fontWeight={600} mb={2} align="center">
-              Satış
+        <Grid item xs={12}>
+          <Paper sx={{ p: { xs: 2, sm: 4 }, borderRadius: 3, boxShadow: 3 }}>
+            <Typography
+              variant="h4"
+              fontWeight={600}
+              mb={4}
+              align="center"
+              color="primary"
+            >
+              Altın {transactionType} İşlemi 🪙
             </Typography>
-            <Grid container spacing={2}>
-              <Grid>
-                {" "}
-                <TextField
-                  label="Müşteri Adı"
-                  value={customerName}
-                  onChange={(e) => setCustomerName(e.target.value)}
-                  fullWidth
-                />
-              </Grid>
-              <Grid>
-                <TextField
-                  label="T.C."
-                  value={customerTC}
-                  onChange={(e) =>
-                    setCustomerTC(e.target.value.replace(/\D/g, ""))
-                  }
-                  inputProps={{ maxLength: 11 }}
-                  fullWidth
-                />
-              </Grid>
-              <Grid>
-                <FormControl fullWidth>
-                  <InputLabel id="product-select-label">Ürün</InputLabel>
-                  <Select
-                    labelId="product-select-label"
-                    id="product-select"
-                    value={product}
-                    label="Ürün"
-                    onChange={(e: SelectChangeEvent<string>) => {
-                      const selectedProductId = e.target.value;
-                      setProduct(selectedProductId);
-                    }}
-                  >
-                    {products.map((prod) => (
-                      <MenuItem key={prod.id} value={prod.id}>
-                        {prod.name}
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
-              </Grid>
-              <Grid>
-                <TextField
-                  label="Ayar"
-                  value={ayar}
-                  onChange={(e) => setAyar(e.target.value)}
-                  fullWidth
-                />
-              </Grid>
-              <Grid>
-                <TextField
-                  label="Has Fiyatı"
-                  value={hasFiyat}
-                  onChange={(e) =>
-                    setHasFiyat(e.target.value.replace(/[^0-9.]/g, ""))
-                  }
-                  InputProps={{
-                    endAdornment: (
-                      <InputAdornment position="end">TL</InputAdornment>
-                    ),
-                  }}
-                  fullWidth
-                />
-              </Grid>
-              <Grid>
-                <TextField
-                  label="Gram"
-                  value={gram}
-                  onChange={(e) =>
-                    setGram(e.target.value.replace(/[^0-9.]/g, ""))
-                  }
-                  InputProps={{
-                    endAdornment: (
-                      <InputAdornment position="end">gr</InputAdornment>
-                    ),
-                  }}
-                  fullWidth
-                />
-              </Grid>
-              <Grid>
-                <FormControl fullWidth>
-                  <InputLabel id="payment-method-label">
-                    Ödeme Yöntemi
-                  </InputLabel>
-                  <Select
-                    labelId="payment-method-label"
-                    value={paymentMethod}
-                    label="Ödeme Yöntemi"
-                    onChange={(e) =>
-                      setPaymentMethod(
-                        e.target.value as "Nakit" | "IBAN" | "Pos"
-                      )
-                    }
-                  >
-                    <MenuItem value="Nakit">Nakit</MenuItem>
-                    <MenuItem value="IBAN">IBAN</MenuItem>
-                    <MenuItem value="Pos">Pos</MenuItem>
-                  </Select>
-                </FormControl>
-              </Grid>
-              <Grid>
-                <TextField
-                  label="Toplam"
-                  value={total}
-                  InputProps={{
-                    readOnly: true,
-                    endAdornment: (
-                      <InputAdornment position="end">TL</InputAdornment>
-                    ),
-                  }}
-                  fullWidth
-                />
-              </Grid>
-              <Grid sx={{ display: "flex", alignItems: "center" }}>
-                <TextField
-                  label="Ödenen Tutar"
-                  type="number"
-                  value={paidAmount}
-                  onChange={(e) => {
-                    setPaidAmount(e.target.value.replace(/[^0-9.]/g, ""));
-                    setIsPaidInFull(false);
-                  }}
-                  InputProps={{
-                    endAdornment: (
-                      <InputAdornment position="end">TL</InputAdornment>
-                    ),
-                  }}
-                  fullWidth
-                />
-                <FormControlLabel
-                  control={
-                    <Checkbox
-                      checked={isPaidInFull}
-                      onChange={(e) => {
-                        setIsPaidInFull(e.target.checked);
-                        if (e.target.checked) {
-                          setPaidAmount(total);
-                        }
-                      }}
-                    />
-                  }
-                  label="Ödendi"
-                  sx={{ ml: 1 }}
-                />
-              </Grid>
-              <Grid>
-                <Button
-                  variant="contained"
-                  color="primary"
-                  fullWidth
-                  size="medium"
-                  onClick={handleSell}
-                  disabled={
-                    !customerName ||
-                    !customerTC ||
-                    !product ||
-                    !ayar ||
-                    !hasFiyat ||
-                    !gram ||
-                    !paidAmount
-                  }
-                >
-                  Satışı Kaydet
-                </Button>
-              </Grid>
-            </Grid>
-          </Paper>
-        </Grid>
 
-        <Grid sx={{ display: "flex" }}>
-          {" "}
-          <Paper sx={{ p: 4, borderRadius: 4, width: "100%", flex: 1 }}>
-            <Typography variant="h6" fontWeight={600} mb={2} align="center">
-              Alış
-            </Typography>
-            <Grid container spacing={2}>
-              <Grid>
-                <TextField
-                  label="Müşteri Adı"
-                  value={buyCustomerName}
-                  onChange={(e) => setBuyCustomerName(e.target.value)}
-                  fullWidth
-                />
-              </Grid>
-              <Grid>
-                <TextField
-                  label="T.C."
-                  value={buyCustomerTC}
-                  onChange={(e) =>
-                    setBuyCustomerTC(e.target.value.replace(/\D/g, ""))
-                  }
-                  inputProps={{ maxLength: 11 }}
-                  fullWidth
-                />
-              </Grid>
-              <Grid>
-                <FormControl fullWidth>
-                  <InputLabel id="buy-product-select-label">Ürün</InputLabel>
-                  <Select
-                    labelId="buy-product-select-label"
-                    id="buy-product-select"
-                    value={buyProduct}
-                    label="Ürün"
-                    onChange={(e: SelectChangeEvent<string>) => {
-                      const selectedProductId = e.target.value;
-                      setBuyProduct(selectedProductId);
-                    }}
-                  >
-                    {products.map((prod) => (
-                      <MenuItem key={prod.id} value={prod.id}>
-                        {prod.name}
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
-              </Grid>
-              <Grid>
-                <TextField
-                  label="Ayar"
-                  value={buyAyar}
-                  onChange={(e) => setBuyAyar(e.target.value)}
-                  fullWidth
-                />
-              </Grid>
-              <Grid>
-                <TextField
-                  label="Has Fiyatı"
-                  value={buyHasFiyat}
-                  onChange={(e) =>
-                    setBuyHasFiyat(e.target.value.replace(/[^0-9.]/g, ""))
-                  }
-                  InputProps={{
-                    endAdornment: (
-                      <InputAdornment position="end">TL</InputAdornment>
-                    ),
+            <Grid container spacing={4}>
+              <Grid item xs={12} md={5}>
+                <Paper
+                  variant="outlined"
+                  sx={{
+                    p: 3,
+                    height: { md: "100%" },
+                    justifyContent: "right",
                   }}
-                  fullWidth
-                />
-              </Grid>
-              <Grid>
-                <TextField
-                  label="Gram"
-                  value={buyGram}
-                  onChange={(e) =>
-                    setBuyGram(e.target.value.replace(/[^0-9.]/g, ""))
-                  }
-                  InputProps={{
-                    endAdornment: (
-                      <InputAdornment position="end">gr</InputAdornment>
-                    ),
-                  }}
-                  fullWidth
-                />
-              </Grid>
-              <Grid>
-                <FormControl fullWidth>
-                  <InputLabel id="buy-payment-method-label">
-                    Ödeme Yöntemi
-                  </InputLabel>
-                  <Select
-                    labelId="buy-payment-method-label"
-                    value={buyPaymentMethod}
-                    label="Ödeme Yöntemi"
-                    onChange={(e) =>
-                      setBuyPaymentMethod(
-                        e.target.value as "Nakit" | "IBAN" | "Pos"
-                      )
-                    }
-                  >
-                    <MenuItem value="Nakit">Nakit</MenuItem>
-                    <MenuItem value="IBAN">IBAN</MenuItem>
-                    <MenuItem value="Pos">Pos</MenuItem>
-                  </Select>
-                </FormControl>
-              </Grid>
-              <Grid>
-                <TextField
-                  label="Toplam"
-                  value={buyTotal}
-                  InputProps={{
-                    readOnly: true,
-                    endAdornment: (
-                      <InputAdornment position="end">TL</InputAdornment>
-                    ),
-                  }}
-                  fullWidth
-                />
-              </Grid>
-              <Grid sx={{ display: "flex", alignItems: "center" }}>
-                <TextField
-                  label="Ödenen Tutar"
-                  type="number"
-                  value={buyPaidAmount}
-                  onChange={(e) => {
-                    setBuyPaidAmount(e.target.value.replace(/[^0-9.]/g, ""));
-                    setIsBuyPaidInFull(false);
-                  }}
-                  InputProps={{
-                    endAdornment: (
-                      <InputAdornment position="end">TL</InputAdornment>
-                    ),
-                  }}
-                  fullWidth
-                />
-                <FormControlLabel
-                  control={
-                    <Checkbox
-                      checked={isBuyPaidInFull}
-                      onChange={(e) => {
-                        setIsBuyPaidInFull(e.target.checked);
-                        if (e.target.checked) {
-                          setBuyPaidAmount(buyTotal);
-                        }
-                      }}
-                    />
-                  }
-                  label="Ödendi"
-                  sx={{ ml: 1 }}
-                />
-              </Grid>
-              <Grid>
-                <Button
-                  variant="contained"
-                  color="primary"
-                  fullWidth
-                  size="medium"
-                  onClick={handleBuy}
-                  disabled={
-                    !buyCustomerName ||
-                    !buyCustomerTC ||
-                    !buyProduct ||
-                    !buyAyar ||
-                    !buyHasFiyat ||
-                    !buyGram ||
-                    !buyPaidAmount
-                  }
                 >
-                  Alışı Kaydet
-                </Button>
+                  <Button
+                    variant={
+                      transactionType === "Satış" ? "contained" : "outlined"
+                    }
+                    color="primary"
+                    fullWidth
+                    size="medium"
+                    onClick={() => changeTransactionType("Satış")}
+                    sx={{ mb: 2 }}
+                  >
+                    Satış (Müşteriye Sat)
+                  </Button>
+                  <Button
+                    variant={
+                      transactionType === "Alış" ? "contained" : "outlined"
+                    }
+                    color="secondary"
+                    fullWidth
+                    size="medium"
+                    onClick={() => changeTransactionType("Alış")}
+                  >
+                    Alış (Müşteriden Al)
+                  </Button>
+                </Paper>
+              </Grid>
+              <Grid item xs={12}>
+                <Grid container spacing={4}>
+                  <Grid item xs={12} md={8}>
+                    <Paper
+                      variant="outlined"
+                      sx={{ p: 3, height: "100%", position: "relative" }}
+                    >
+                      <Typography variant="h6" mb={3} color="text.secondary">
+                        1. Müşteri Bilgileri
+                      </Typography>
+                      <Grid container spacing={2}>
+                        <Grid item xs={12} sm={6}>
+                          <TextField
+                            label="Müşteri Adı *"
+                            value={customerName}
+                            onChange={(e) => setCustomerName(e.target.value)}
+                            fullWidth
+                            required
+                          />
+                        </Grid>
+                        <Grid item xs={12} sm={6}>
+                          <TextField
+                            label="T.C. *"
+                            value={customerTC}
+                            onChange={(e) =>
+                              setCustomerTC(e.target.value.replace(/\D/g, ""))
+                            }
+                            inputProps={{ maxLength: 11 }}
+                            fullWidth
+                            required
+                          />
+                        </Grid>
+                        <Grid item xs={12}>
+                          <TextField
+                            label="Telefon Numarası (Opsiyonel)"
+                            value={customerPhone}
+                            onChange={handlePhoneChange}
+                            inputProps={{ maxLength: 11 }}
+                            fullWidth
+                          />
+                        </Grid>
+                      </Grid>
+                    </Paper>
+                  </Grid>
+                </Grid>
+              </Grid>
+              <Grid item xs={12} md={6}>
+                <Paper variant="outlined" sx={{ p: 3, height: "100%" }}>
+                  <Typography variant="h6" mb={3} color="text.secondary">
+                    2. Ürün ve Finans
+                  </Typography>
+                  <Grid container spacing={2}>
+                    <Grid item xs={12}>
+                      <FormControl fullWidth required>
+                        <InputLabel id="product-select-label">
+                          Ürün *
+                        </InputLabel>
+                        <Select
+                          labelId="product-select-label"
+                          id="product-select"
+                          value={product}
+                          label="Ürün *"
+                          onChange={(e: SelectChangeEvent<string>) =>
+                            setProduct(e.target.value)
+                          }
+                        >
+                          {products.map((prod) => (
+                            <MenuItem key={prod.id} value={prod.id}>
+                              {prod.name}
+                            </MenuItem>
+                          ))}
+                        </Select>
+                      </FormControl>
+                    </Grid>
+
+                    <Grid item xs={12} sm={6}>
+                      <TextField
+                        label="Has Fiyatı *"
+                        value={hasFiyat}
+                        onChange={(e) =>
+                          setHasFiyat(e.target.value.replace(/[^0-9.]/g, ""))
+                        }
+                        InputProps={{
+                          endAdornment: (
+                            <InputAdornment position="end">TL</InputAdornment>
+                          ),
+                        }}
+                        fullWidth
+                        required
+                      />
+                    </Grid>
+
+                    <Grid item xs={12} sm={6}>
+                      <TextField
+                        label="İşçilik Çarpanı *"
+                        value={carpanDegeri}
+                        onChange={(e) =>
+                          setCarpanDegeri(
+                            e.target.value.replace(/[^0-9.]/g, "")
+                          )
+                        }
+                        type="number"
+                        InputProps={{ inputProps: { min: 0 } }}
+                        fullWidth
+                        required
+                        helperText="Toplam fiyatı etkileyen işçilik/kar çarpanı"
+                      />
+                    </Grid>
+
+                    <Grid item xs={12}>
+                      <TextField
+                        label="Gram *"
+                        value={gram}
+                        onChange={(e) =>
+                          setGram(e.target.value.replace(/[^0-9.]/g, ""))
+                        }
+                        InputProps={{
+                          endAdornment: (
+                            <InputAdornment position="end">gr</InputAdornment>
+                          ),
+                        }}
+                        fullWidth
+                        required
+                      />
+                    </Grid>
+                  </Grid>
+                </Paper>
+              </Grid>
+
+              <Grid item xs={12} md={6}>
+                <Paper
+                  variant="outlined"
+                  sx={{ p: 3, height: "100%", bgcolor: "action.hover" }}
+                >
+                  <Typography variant="h6" mb={3} color="text.secondary">
+                    3. Ödeme ve Sonuç
+                  </Typography>
+                  <Grid container spacing={2}>
+                    <Grid item xs={12} sm={6}>
+                      <TextField
+                        label="Toplam Tutar"
+                        value={total}
+                        InputProps={{
+                          readOnly: true,
+                          endAdornment: (
+                            <InputAdornment position="end">TL</InputAdornment>
+                          ),
+                        }}
+                        fullWidth
+                        variant="filled"
+                        color="success"
+                        focused
+                      />
+                    </Grid>
+
+                    <Grid item xs={12} sm={6}>
+                      <FormControl fullWidth>
+                        <InputLabel id="payment-method-label">
+                          Ödeme Yöntemi
+                        </InputLabel>
+                        <Select
+                          labelId="payment-method-label"
+                          value={paymentMethod}
+                          label="Ödeme Yöntemi"
+                          onChange={(e) =>
+                            setPaymentMethod(
+                              e.target.value as "Nakit" | "IBAN" | "Pos"
+                            )
+                          }
+                        >
+                          <MenuItem value="Nakit">Nakit</MenuItem>
+                          <MenuItem value="IBAN">IBAN</MenuItem>
+                          <MenuItem value="Pos">Pos</MenuItem>
+                        </Select>
+                      </FormControl>
+                    </Grid>
+
+                    <Grid
+                      item
+                      xs={12}
+                      sx={{
+                        display: "flex",
+                        alignItems: "center",
+                        "& > div": { flexGrow: 1 },
+                      }}
+                    >
+                      <TextField
+                        label="Ödenen Tutar *"
+                        type="number"
+                        value={paidAmount}
+                        onChange={(e) => {
+                          const value = e.target.value.replace(/[^0-9.]/g, "");
+                          setPaidAmount(value);
+                          if (value !== total) {
+                            setIsPaidInFull(false);
+                          }
+                        }}
+                        InputProps={{
+                          endAdornment: (
+                            <InputAdornment position="end">TL</InputAdornment>
+                          ),
+                        }}
+                        fullWidth
+                        required
+                        color={
+                          paidAmount === total && total !== ""
+                            ? "success"
+                            : "primary"
+                        }
+                      />
+                      <FormControlLabel
+                        control={
+                          <Checkbox
+                            checked={isPaidInFull}
+                            onChange={(e) => {
+                              const checked = e.target.checked;
+                              setIsPaidInFull(checked);
+                              if (checked) {
+                                setPaidAmount(total);
+                              } else if (paidAmount === total) {
+                                setPaidAmount("0");
+                              }
+                            }}
+                          />
+                        }
+                        label="Tamamı Ödendi"
+                        sx={{ ml: 1, minWidth: "120px" }}
+                      />
+                    </Grid>
+
+                    <Grid item xs={12}>
+                      <Button
+                        variant="contained"
+                        color="primary"
+                        fullWidth
+                        size="large"
+                        onClick={handleTransaction}
+                        disabled={
+                          !customerName ||
+                          !customerTC ||
+                          !product ||
+                          !hasFiyat ||
+                          !gram ||
+                          !paidAmount ||
+                          !carpanDegeri ||
+                          parseFloat(total) <= 0
+                        }
+                        sx={{ mt: 2 }}
+                      >
+                        {transactionType} İşlemini Kaydet
+                      </Button>
+                    </Grid>
+                  </Grid>
+                </Paper>
               </Grid>
             </Grid>
           </Paper>

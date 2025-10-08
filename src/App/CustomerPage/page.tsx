@@ -36,6 +36,7 @@ const CustomerPage = () => {
   const [editCustomer, setEditCustomer] = useState<Partial<Customer>>({
     name: "",
     tc: "",
+    // phone alanı zaten burada tanımlı, ancak boş kalmasın diye ekledim.
     phone: "",
     soldItem: "",
     total: 0,
@@ -64,6 +65,7 @@ const CustomerPage = () => {
     setEditCustomer({
       name: customer.name || "",
       tc: customer.tc || "",
+      // 🎉 Mevcut müşteri verisinden phone alanını alıyoruz
       phone: customer.phone || "",
       soldItem: customer.soldItem || "",
       total: customer.total || 0,
@@ -87,7 +89,7 @@ const CustomerPage = () => {
       setEditCustomer({
         name: "",
         tc: "",
-        phone: "",
+        phone: "", // reset
         soldItem: "",
         total: 0,
         paid: 0,
@@ -127,7 +129,7 @@ const CustomerPage = () => {
     <Box sx={{ mt: 4, display: "flex", justifyContent: "center" }}>
       <Paper sx={{ p: 4, width: "100%", maxWidth: 1100, borderRadius: 4 }}>
         <Typography variant="h5" fontWeight={600} mb={3} align="center">
-          Müşteri Yönetimi
+          Müşteri Yönetimi 👤
         </Typography>
 
         <Box mb={3}>
@@ -144,7 +146,7 @@ const CustomerPage = () => {
             <TableBody>
               {Object.entries(groupedCustomers).length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={9} align="center">
+                  <TableCell colSpan={10} align="center">
                     Arama kriterlerinize uygun müşteri bulunamadı.
                   </TableCell>
                 </TableRow>
@@ -152,7 +154,8 @@ const CustomerPage = () => {
               {Object.entries(groupedCustomers).map(([name, entries]) => (
                 <React.Fragment key={name}>
                   <TableRow>
-                    <TableCell colSpan={9} sx={{ backgroundColor: "#f5f5f5" }}>
+                    {/* colSpan'ı 9'dan 10'a çıkardık */}
+                    <TableCell colSpan={10} sx={{ backgroundColor: "#f5f5f5" }}>
                       <Box
                         display="flex"
                         alignItems="center"
@@ -175,7 +178,8 @@ const CustomerPage = () => {
                     </TableCell>
                   </TableRow>
                   <TableRow>
-                    <TableCell colSpan={9} sx={{ p: 0 }}>
+                    {/* colSpan'ı 9'dan 10'a çıkardık */}
+                    <TableCell colSpan={10} sx={{ p: 0 }}>
                       {" "}
                       <Collapse
                         in={expandedName === name}
@@ -187,6 +191,8 @@ const CustomerPage = () => {
                             <TableRow>
                               <TableCell>Ad Soyad</TableCell>
                               <TableCell>T.C.</TableCell>
+                              {/* 🎉 Yeni Telefon Sütunu */}
+                              <TableCell>Telefon</TableCell>
                               <TableCell>Son Alışveriş</TableCell>
                               <TableCell>Toplam Satış Tutarı (TL)</TableCell>
                               <TableCell>Toplam Ödenen (TL)</TableCell>
@@ -232,6 +238,27 @@ const CustomerPage = () => {
                                     customer.tc
                                   )}
                                 </TableCell>
+                                {/* 🎉 Telefon Alanı Gösterimi ve Düzenlemesi */}
+                                <TableCell>
+                                  {editId === customer.id ? (
+                                    <TextField
+                                      value={editCustomer.phone}
+                                      onChange={(e) =>
+                                        setEditCustomer({
+                                          ...editCustomer,
+                                          phone: e.target.value
+                                            .replace(/\D/g, "")
+                                            .slice(0, 11), // Telefon numarası kısıtlaması (örneğin 11 hane)
+                                        })
+                                      }
+                                      size="small"
+                                      type="tel"
+                                    />
+                                  ) : (
+                                    customer.phone || "-"
+                                  )}
+                                </TableCell>
+                                {/* 🎉 Telefon Alanı Bitti */}
                                 <TableCell>
                                   {editId === customer.id ? (
                                     <TextField

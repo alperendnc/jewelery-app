@@ -1,4 +1,4 @@
-import React, {
+import {
   useContext,
   createContext,
   ReactNode,
@@ -24,7 +24,6 @@ import {
   User,
 } from "firebase/auth";
 import { Timestamp } from "firebase/firestore";
-import formDate from "../components/formDate";
 
 export interface Product {
   id?: string;
@@ -90,7 +89,7 @@ export interface Sale {
 
 export interface Transaction {
   id: string;
-  type: "Giriş" | "Çıkış";
+  type: "Alış" | "Satış";
   description: string;
   amount: number;
   date: string;
@@ -194,34 +193,49 @@ export function AuthProvider({ children }: AuthProviderProps) {
     return unsubscribe;
   }, []);
 
-  const formatDateToYYYYMMDD = (
+  const formatDateToDB = (
     date: string | Timestamp | Date | undefined
   ): string => {
     if (!date) return "";
 
+    let d: Date;
+
     if (date instanceof Timestamp) {
-      return date.toDate().toISOString().slice(0, 10);
-    }
-    if (date instanceof Date) {
-      return date.toISOString().slice(0, 10);
-    }
-    if (typeof date === "string") {
-      if (/^\d{2}-\d{2}-\d{4}/.test(date)) {
-        const [day, month, yearAndTime] = date.split("-");
-        const [year, time] = yearAndTime.split("T");
-        const isoString = `${year}-${month}-${day}${time ? "T" + time : ""}`;
-        const parsedDate = new Date(isoString);
-        if (!isNaN(parsedDate.getTime())) {
-          return parsedDate.toISOString().slice(0, 10);
-        }
+      d = date.toDate();
+    } else if (date instanceof Date) {
+      d = date;
+    } else if (typeof date === "string") {
+      if (/^\d{2}-\d{2}-\d{4}T\d{2}:\d{2}:\d{2}$/.test(date)) {
+        const [datePart] = date.split("T");
+        const [day, month, year] = datePart.split("-");
+        d = new Date(`${year}-${month}-${day}T00:00:00`);
+      } else if (!isNaN(Date.parse(date))) {
+        d = new Date(date);
+      } else {
+        return "";
       }
-
-      if (!isNaN(Date.parse(date))) {
-        return new Date(date).toISOString().slice(0, 10);
-      }
+    } else {
+      return "";
     }
 
-    return "";
+    if (isNaN(d.getTime())) return "";
+
+    const year = d.getFullYear();
+    const month = (d.getMonth() + 1).toString().padStart(2, "0");
+    const day = d.getDate().toString().padStart(2, "0");
+
+    return `${year}-${month}-${day}`;
+  };
+
+  const formatDateToDDMMYYYY = (
+    date: string | Timestamp | Date | undefined
+  ): string => {
+    const yyyymmdd = formatDateToDB(date);
+    if (!yyyymmdd) return "";
+
+    const [year, month, day] = yyyymmdd.split("-");
+
+    return `${day}-${month}-${year}`;
   };
 
   const addProduct = async (product: Omit<Product, "id" | "createdAt">) => {
@@ -230,13 +244,14 @@ export function AuthProvider({ children }: AuthProviderProps) {
       createdAt: new Date(),
     });
   };
+
   const addSupplierTransaction = async (
     transaction: Omit<SupplierTransaction, "id">
   ) => {
     const ref = collection(db, "supplierTransactions");
     await addDoc(ref, {
       ...transaction,
-      date: formatDateToYYYYMMDD(transaction.date),
+      date: formatDateToDB(transaction.date),
       paymentMethod: transaction.paymentMethod || "Nakit",
     });
   };
@@ -247,7 +262,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       return {
         id: doc.id,
         ...restOfData,
-        date: formatDateToYYYYMMDD(restOfData.date),
+        date: formatDateToDDMMYYYY(restOfData.date),
       };
     }) as SupplierTransaction[];
   };
@@ -261,7 +276,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
   ) => {
     const ref = doc(db, "supplierTransactions", id);
     if (updatedFields.date) {
-      updatedFields.date = formatDateToYYYYMMDD(updatedFields.date);
+      updatedFields.date = formatDateToDB(updatedFields.date);
     }
     await setDoc(ref, updatedFields, { merge: true });
   };
@@ -334,17 +349,20 @@ export function AuthProvider({ children }: AuthProviderProps) {
     });
     return unsubscribe;
   };
+
   const addSale = async (sale: Omit<Sale, "id">) => {
+    const standardizedDate = formatDateToDB(sale.date);
+
     await addDoc(collection(db, "sales"), {
       ...sale,
-      date: formDate(sale.date),
+      date: standardizedDate,
     });
 
     await addDoc(collection(db, "transactions"), {
-      type: "Giriş",
+      type: "Satış",
       description: `${sale.productName} satışı`,
       amount: sale.total,
-      date: formatDateToYYYYMMDD(sale.date),
+      date: standardizedDate,
       method: sale.paymentMethod || "Nakit",
     });
 
@@ -395,7 +413,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
             total: sale.total,
             paid: sale.paid,
             debt: newDebt,
-            date: sale.date,
+            date: standardizedDate,
           },
           { merge: true }
         );
@@ -428,7 +446,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const updateSale = async (id: string, updatedFields: Partial<Sale>) => {
     const ref = doc(db, "sales", id);
     if (updatedFields.date) {
-      updatedFields.date = formDate(updatedFields.date);
+      updatedFields.date = formatDateToDB(updatedFields.date);
     }
     await setDoc(ref, updatedFields, { merge: true });
   };
@@ -440,7 +458,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
       return {
         ...data,
         id: doc.id,
-        date: data.date,
+
+        date: formatDateToDDMMYYYY(data.date),
       };
     });
   };
@@ -448,7 +467,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const addTransaction = async (transaction: Omit<Transaction, "id">) => {
     await addDoc(collection(db, "transactions"), {
       ...transaction,
-      date: formatDateToYYYYMMDD(transaction.date),
+      date: formatDateToDB(transaction.date),
     });
   };
 
@@ -459,7 +478,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       return {
         id: doc.id,
         ...restOfData,
-        date: formatDateToYYYYMMDD(restOfData.date),
+        date: formatDateToDDMMYYYY(restOfData.date),
       };
     });
   };
@@ -470,7 +489,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
   ) => {
     const ref = doc(db, "transactions", id);
     if (updatedFields.date) {
-      updatedFields.date = formatDateToYYYYMMDD(updatedFields.date);
+      updatedFields.date = formatDateToDB(updatedFields.date);
     }
     await setDoc(ref, updatedFields, { merge: true });
   };
@@ -486,7 +505,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       return {
         ...data,
         id: doc.id,
-        date: data.date,
+        date: formatDateToDDMMYYYY(data.date),
       };
     });
   };
@@ -495,7 +514,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     const docRef = doc(db, "purchases", id);
     await setDoc(docRef, {
       ...data,
-      date: formatDateToYYYYMMDD(data.date),
+      date: formatDateToDB(data.date),
     });
   };
 
@@ -504,17 +523,18 @@ export function AuthProvider({ children }: AuthProviderProps) {
   };
 
   const addPurchases = async (purchase: Omit<Purchase, "id">) => {
+    const standardizedDate = formatDateToDB(purchase.date);
+
     await addDoc(collection(db, "purchases"), {
       ...purchase,
-      date: formDate(purchase.date),
+      date: standardizedDate,
     });
 
     await addDoc(collection(db, "transactions"), {
-      type: "Çıkış",
+      type: "Alış",
       description: `${purchase.customerName} - ${purchase.productName} alım`,
       amount: purchase.paid,
-      date: formatDateToYYYYMMDD(purchase.date),
-
+      date: standardizedDate,
       method: purchase.paymentMethod || "Nakit",
     });
 
@@ -568,7 +588,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
             total: purchase.total,
             paid: purchase.paid,
             debt: newDebt,
-            date: purchase.date,
+            date: standardizedDate,
           },
           { merge: true }
         );
@@ -588,7 +608,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
   ) => {
     await addDoc(collection(db, "currencyTransactions"), {
       ...transaction,
-      date: formatDateToYYYYMMDD(transaction.date),
+      date: formatDateToDB(transaction.date),
     });
   };
 
@@ -599,7 +619,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       return {
         ...data,
         id: doc.id,
-        date: formatDateToYYYYMMDD(data.date),
+        date: formatDateToDDMMYYYY(data.date),
       };
     });
   };
@@ -612,7 +632,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
   ) => {
     const ref = doc(db, "currencyTransactions", id);
     if (updatedFields.date) {
-      updatedFields.date = formatDateToYYYYMMDD(updatedFields.date);
+      updatedFields.date = formatDateToDB(updatedFields.date);
     }
     await setDoc(ref, updatedFields, { merge: true });
   };
