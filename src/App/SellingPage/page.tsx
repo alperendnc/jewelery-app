@@ -87,6 +87,7 @@ function SellingPage() {
       setPaidAmount(total);
     }
   }, [total, isPaidInFull, paidAmount]);
+
   const getLocalDateTime = () => {
     const now = new Date();
     return now
@@ -125,25 +126,16 @@ function SellingPage() {
   const handleTransaction = async () => {
     const productName = products.find((p) => p.id === product)?.name || "";
 
-    if (
-      !customerName ||
-      !customerTC ||
-      !product ||
-      !hasFiyat ||
-      !gram ||
-      !total ||
-      !paidAmount ||
-      !carpanDegeri
-    ) {
-      enqueueSnackbar("Lütfen tüm zorunlu alanları doldurun.", {
+    const paid = parseFloat(paidAmount);
+    const totalAmount = parseFloat(total);
+    const quantity = parseFloat(gram);
+
+    if (totalAmount <= 0) {
+      enqueueSnackbar("Toplam tutar 0'dan büyük olmalıdır.", {
         variant: "warning",
       });
       return;
     }
-
-    const paid = parseFloat(paidAmount);
-    const totalAmount = parseFloat(total);
-    const quantity = parseFloat(gram);
 
     if (paid > totalAmount) {
       enqueueSnackbar("Ödenen tutar, toplam tutardan fazla olamaz.", {
@@ -158,23 +150,23 @@ function SellingPage() {
           productId: product,
           productName: productName,
           customerId: "",
-          customerName,
+          customerName: customerName || "-",
           quantity,
           total: totalAmount,
           paid,
           date: getLocalDateTime(),
           paymentMethod,
           customer: {
-            name: customerName,
-            tc: customerTC,
-            phone: customerPhone,
+            name: customerName || "-",
+            tc: customerTC || "-",
+            phone: customerPhone || "",
           },
         });
         enqueueSnackbar("Satış başarıyla kaydedildi!", { variant: "success" });
       } else if (transactionType === "Alış") {
         await addPurchases({
           productName: productName,
-          customerName,
+          customerName: customerName || "-",
           quantity,
           total: totalAmount,
           paid,
@@ -182,9 +174,9 @@ function SellingPage() {
           paymentMethod,
           boughtItem: productName,
           customer: {
-            name: customerName,
-            tc: customerTC,
-            phone: customerPhone,
+            name: customerName || "-",
+            tc: customerTC || "-",
+            phone: customerPhone || "",
           },
         });
         enqueueSnackbar("Alış başarıyla kaydedildi!", { variant: "success" });
@@ -277,23 +269,21 @@ function SellingPage() {
                       <Grid container spacing={2}>
                         <Grid item xs={12} sm={6}>
                           <TextField
-                            label="Müşteri Adı *"
+                            label="Müşteri Adı"
                             value={customerName}
                             onChange={(e) => setCustomerName(e.target.value)}
                             fullWidth
-                            required
                           />
                         </Grid>
                         <Grid item xs={12} sm={6}>
                           <TextField
-                            label="T.C. *"
+                            label="T.C."
                             value={customerTC}
                             onChange={(e) =>
                               setCustomerTC(e.target.value.replace(/\D/g, ""))
                             }
                             inputProps={{ maxLength: 11 }}
                             fullWidth
-                            required
                           />
                         </Grid>
                         <Grid item xs={12}>
@@ -317,15 +307,14 @@ function SellingPage() {
                   </Typography>
                   <Grid container spacing={2}>
                     <Grid item xs={12}>
-                      <FormControl fullWidth required>
-                        <InputLabel id="product-select-label">
-                          Ürün *
-                        </InputLabel>
+                      <FormControl fullWidth>
+                        {" "}
+                        <InputLabel id="product-select-label">Ürün</InputLabel>
                         <Select
                           labelId="product-select-label"
                           id="product-select"
                           value={product}
-                          label="Ürün *"
+                          label="Ürün"
                           onChange={(e: SelectChangeEvent<string>) =>
                             setProduct(e.target.value)
                           }
@@ -341,7 +330,7 @@ function SellingPage() {
 
                     <Grid item xs={12} sm={6}>
                       <TextField
-                        label="Has Fiyatı *"
+                        label="Has Fiyatı"
                         value={hasFiyat}
                         onChange={(e) =>
                           setHasFiyat(e.target.value.replace(/[^0-9.]/g, ""))
@@ -352,13 +341,12 @@ function SellingPage() {
                           ),
                         }}
                         fullWidth
-                        required
                       />
                     </Grid>
 
                     <Grid item xs={12} sm={6}>
                       <TextField
-                        label="İşçilik Çarpanı *"
+                        label="İşçilik Çarpanı"
                         value={carpanDegeri}
                         onChange={(e) =>
                           setCarpanDegeri(
@@ -368,14 +356,13 @@ function SellingPage() {
                         type="number"
                         InputProps={{ inputProps: { min: 0 } }}
                         fullWidth
-                        required
                         helperText="Toplam fiyatı etkileyen işçilik/kar çarpanı"
                       />
                     </Grid>
 
                     <Grid item xs={12}>
                       <TextField
-                        label="Gram *"
+                        label="Gram"
                         value={gram}
                         onChange={(e) =>
                           setGram(e.target.value.replace(/[^0-9.]/g, ""))
@@ -386,7 +373,6 @@ function SellingPage() {
                           ),
                         }}
                         fullWidth
-                        required
                       />
                     </Grid>
                   </Grid>
@@ -451,7 +437,7 @@ function SellingPage() {
                       }}
                     >
                       <TextField
-                        label="Ödenen Tutar *"
+                        label="Ödenen Tutar"
                         type="number"
                         value={paidAmount}
                         onChange={(e) => {
@@ -467,7 +453,6 @@ function SellingPage() {
                           ),
                         }}
                         fullWidth
-                        required
                         color={
                           paidAmount === total && total !== ""
                             ? "success"
@@ -501,16 +486,7 @@ function SellingPage() {
                         fullWidth
                         size="large"
                         onClick={handleTransaction}
-                        disabled={
-                          !customerName ||
-                          !customerTC ||
-                          !product ||
-                          !hasFiyat ||
-                          !gram ||
-                          !paidAmount ||
-                          !carpanDegeri ||
-                          parseFloat(total) <= 0
-                        }
+                        disabled={parseFloat(total) <= 0}
                         sx={{ mt: 2 }}
                       >
                         {transactionType} İşlemini Kaydet
