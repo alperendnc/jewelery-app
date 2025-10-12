@@ -48,6 +48,7 @@ function SellingPage() {
   );
   const [paidAmount, setPaidAmount] = useState("0");
   const [isPaidInFull, setIsPaidInFull] = useState(false);
+  const [isTotalManuallySet, setIsTotalManuallySet] = useState(false);
 
   useEffect(() => {
     async function fetchStockProducts() {
@@ -75,8 +76,16 @@ function SellingPage() {
     const carpan = parseFloat(carpanDegeri) || 1;
 
     const calculatedTotal = fiyat * carpan * miktar;
-    setTotal(calculatedTotal > 0 ? calculatedTotal.toFixed(2) : "");
-  }, [hasFiyat, gram, carpanDegeri]);
+    const newTotalValue = calculatedTotal > 0 ? calculatedTotal.toFixed(2) : "";
+
+    if (!isTotalManuallySet) {
+      setTotal(newTotalValue);
+    }
+    if (calculatedTotal === 0) {
+      setTotal("");
+      setIsTotalManuallySet(false);
+    }
+  }, [hasFiyat, gram, carpanDegeri, isTotalManuallySet]);
 
   useEffect(() => {
     if (isPaidInFull) {
@@ -116,11 +125,18 @@ function SellingPage() {
     setPaymentMethod("Nakit");
     setPaidAmount("0");
     setIsPaidInFull(false);
+    setIsTotalManuallySet(false);
   };
 
   const changeTransactionType = (type: TransactionType) => {
     setTransactionType(type);
     resetForm();
+  };
+
+  const handleTotalChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value.replace(/[^0-9.]/g, "");
+    setTotal(value);
+    setIsTotalManuallySet(true);
   };
 
   const handleTransaction = async () => {
@@ -392,8 +408,8 @@ function SellingPage() {
                       <TextField
                         label="Toplam Tutar"
                         value={total}
+                        onChange={handleTotalChange}
                         InputProps={{
-                          readOnly: true,
                           endAdornment: (
                             <InputAdornment position="end">TL</InputAdornment>
                           ),
@@ -402,6 +418,11 @@ function SellingPage() {
                         variant="filled"
                         color="success"
                         focused
+                        helperText={
+                          isTotalManuallySet
+                            ? "Manuel Olarak Girildi"
+                            : "Otomatik Hesaplandı"
+                        }
                       />
                     </Grid>
 
@@ -486,7 +507,7 @@ function SellingPage() {
                         fullWidth
                         size="large"
                         onClick={handleTransaction}
-                        disabled={parseFloat(total) <= 0}
+                        disabled={parseFloat(total) <= 0 || total === ""}
                         sx={{ mt: 2 }}
                       >
                         {transactionType} İşlemini Kaydet
