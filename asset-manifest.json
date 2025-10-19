@@ -1,10 +1,10 @@
 {
   "files": {
-    "main.js": "/jewelery-app/static/js/main.734a60b2.js",
+    "main.js": "/jewelery-app/static/js/main.ab4f0362.js",
     "index.html": "/jewelery-app/index.html",
-    "main.734a60b2.js.map": "/jewelery-app/static/js/main.734a60b2.js.map"
+    "main.ab4f0362.js.map": "/jewelery-app/static/js/main.ab4f0362.js.map"
   },
   "entrypoints": [
-    "static/js/main.734a60b2.js"
+    "static/js/main.ab4f0362.js"
   ]
 }
