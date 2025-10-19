@@ -28,7 +28,8 @@ interface ProductItem {
 function SellingPage() {
   const Grid: any = MuiGrid;
 
-  const { addSale, addPurchases, getProducts, addCustomer } = useAuth();
+  const { addSale, addPurchases, getProducts } = useAuth();
+
   const { enqueueSnackbar } = useSnackbar();
 
   const [products, setProducts] = useState<ProductItem[]>([]);
@@ -76,14 +77,11 @@ function SellingPage() {
     const carpan = parseFloat(carpanDegeri) || 1;
 
     const calculatedTotal = fiyat * carpan * miktar;
-    const newTotalValue = calculatedTotal > 0 ? calculatedTotal.toFixed(2) : "";
+
+    const newTotalValue = calculatedTotal.toFixed(2);
 
     if (!isTotalManuallySet) {
       setTotal(newTotalValue);
-    }
-    if (calculatedTotal === 0) {
-      setTotal("");
-      setIsTotalManuallySet(false);
     }
   }, [hasFiyat, gram, carpanDegeri, isTotalManuallySet]);
 
@@ -99,18 +97,14 @@ function SellingPage() {
 
   const getLocalDateTime = () => {
     const now = new Date();
-    return now
-      .toLocaleString("tr-TR", {
-        year: "numeric",
-        month: "2-digit",
-        day: "2-digit",
-        hour: "2-digit",
-        minute: "2-digit",
-        second: "2-digit",
-        hour12: false,
-      })
-      .replace(/\./g, "-")
-      .replace(/, /g, "T");
+    const year = now.getFullYear();
+    const month = (now.getMonth() + 1).toString().padStart(2, "0");
+    const day = now.getDate().toString().padStart(2, "0");
+    const hour = now.getHours().toString().padStart(2, "0");
+    const minute = now.getMinutes().toString().padStart(2, "0");
+    const second = now.getSeconds().toString().padStart(2, "0");
+
+    return `${year}-${month}-${day}T${hour}:${minute}:${second}`;
   };
 
   const resetForm = () => {
@@ -322,9 +316,8 @@ function SellingPage() {
                     2. Ürün ve Finans
                   </Typography>
                   <Grid container spacing={2}>
-                    <Grid item xs={12}>
-                      <FormControl fullWidth>
-                        {" "}
+                    <Grid item xs={12} sm={6}>
+                      <FormControl fullWidth sx={{ minWidth: "120px" }}>
                         <InputLabel id="product-select-label">Ürün</InputLabel>
                         <Select
                           labelId="product-select-label"
@@ -346,14 +339,14 @@ function SellingPage() {
 
                     <Grid item xs={12} sm={6}>
                       <TextField
-                        label="Has Fiyatı"
-                        value={hasFiyat}
+                        label="Gram"
+                        value={gram}
                         onChange={(e) =>
-                          setHasFiyat(e.target.value.replace(/[^0-9.]/g, ""))
+                          setGram(e.target.value.replace(/[^0-9.]/g, ""))
                         }
                         InputProps={{
                           endAdornment: (
-                            <InputAdornment position="end">TL</InputAdornment>
+                            <InputAdornment position="end">gr</InputAdornment>
                           ),
                         }}
                         fullWidth
@@ -362,23 +355,7 @@ function SellingPage() {
 
                     <Grid item xs={12} sm={6}>
                       <TextField
-                        label="İşçilik Çarpanı"
-                        value={carpanDegeri}
-                        onChange={(e) =>
-                          setCarpanDegeri(
-                            e.target.value.replace(/[^0-9.]/g, "")
-                          )
-                        }
-                        type="number"
-                        InputProps={{ inputProps: { min: 0 } }}
-                        fullWidth
-                        helperText="Toplam fiyatı etkileyen işçilik/kar çarpanı"
-                      />
-                    </Grid>
-
-                    <Grid item xs={12}>
-                      <TextField
-                        label="Gram"
+                        label="Adet"
                         value={gram}
                         onChange={(e) =>
                           setGram(e.target.value.replace(/[^0-9.]/g, ""))
@@ -418,11 +395,6 @@ function SellingPage() {
                         variant="filled"
                         color="success"
                         focused
-                        helperText={
-                          isTotalManuallySet
-                            ? "Manuel Olarak Girildi"
-                            : "Otomatik Hesaplandı"
-                        }
                       />
                     </Grid>
 

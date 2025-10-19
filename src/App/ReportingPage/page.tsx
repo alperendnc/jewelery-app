@@ -215,7 +215,7 @@ const ReportingPage = () => {
                   <TableCell>Tarih</TableCell>
                   <TableCell>Müşteri</TableCell>
                   <TableCell>Ürün</TableCell>
-                  <TableCell>Gram</TableCell>
+                  <TableCell>Gram/Adet</TableCell>
                   <TableCell>Tutar (TL)</TableCell>
                   <TableCell>Ödenen (TL)</TableCell>
                   <TableCell>Kalan (TL)</TableCell>
@@ -269,7 +269,7 @@ const ReportingPage = () => {
                     <TableCell>Tarih</TableCell>
                     <TableCell>Müşteri</TableCell>
                     <TableCell>Ürün</TableCell>
-                    <TableCell>Gram</TableCell>
+                    <TableCell>Gram/Adet</TableCell>
                     <TableCell>Tutar (TL)</TableCell>
                     <TableCell>Ödenen (TL)</TableCell>
                     <TableCell>Kalan (TL)</TableCell>
@@ -291,10 +291,7 @@ const ReportingPage = () => {
                         {r.paymentMethod || "-"}
                       </TableCell>
                       <TableCell align="center">
-                        <IconButton
-                          size="small"
-                          onClick={() => handleEdit("purchase", r)}
-                        >
+                        <IconButton onClick={() => handleEdit("purchase", r)}>
                           <EditIcon />
                         </IconButton>
                         <IconButton

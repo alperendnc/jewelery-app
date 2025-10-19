@@ -18,10 +18,6 @@ import {
   DialogActions,
   Button,
   TextField,
-  MenuItem,
-  Select,
-  InputLabel,
-  FormControl,
 } from "@mui/material";
 
 import MoneyIcon from "@mui/icons-material/AttachMoney";
@@ -34,10 +30,89 @@ import {
   CurrencyTransaction,
 } from "src/contexts/UseAuth";
 import formDate from "src/components/formDate";
+import { Timestamp } from "firebase/firestore";
 
 type EditTransactionData = Partial<Omit<Transaction, "id">>;
 type EditSupplierTransactionData = Partial<Omit<SupplierTransaction, "id">>;
 type EditCurrencyTransactionData = Partial<Omit<CurrencyTransaction, "id">>;
+
+type DailyCashRecord = {
+  id: string;
+  date: string;
+  initialCash: number;
+  finalCash: number;
+  totalMovement: number;
+};
+
+const CriticalConfirmationDialog = ({
+  open,
+  onClose,
+  onConfirm,
+  title,
+  message,
+  confirmText = "Onayla",
+  isDestructive = false,
+}: {
+  open: boolean;
+  onClose: () => void;
+  onConfirm: () => void;
+  title: string;
+  message: string;
+  confirmText?: string;
+  isDestructive?: boolean;
+}) => {
+  return (
+    <Dialog open={open} onClose={onClose}>
+      <DialogTitle>{title}</DialogTitle>
+      <DialogContent dividers>
+        <Typography>{message}</Typography>
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={onClose} color="primary">
+          İptal
+        </Button>
+        <Button
+          onClick={onConfirm}
+          color={isDestructive ? "error" : "primary"}
+          variant="contained"
+        >
+          {confirmText}
+        </Button>
+      </DialogActions>
+    </Dialog>
+  );
+};
+
+const DeleteConfirmationDialog = ({
+  open,
+  onClose,
+  onConfirm,
+  type,
+}: {
+  open: boolean;
+  onClose: () => void;
+  onConfirm: () => void;
+  type: "transaction" | "supplierTransaction" | "currencyTransaction" | null;
+}) => {
+  const typeMap = {
+    transaction: "Kasa/Finans İşlemi",
+    supplierTransaction: "Toptancı İşlemi",
+    currencyTransaction: "Döviz İşlemi",
+  };
+  const title = type ? typeMap[type] : "Kayıt";
+
+  return (
+    <CriticalConfirmationDialog
+      open={open}
+      onClose={onClose}
+      onConfirm={onConfirm}
+      title="Kayıt Silme Onayı"
+      message={`**${title}** türündeki bu kaydı kalıcı olarak silmek istediğinizden emin misiniz? Bu işlem geri alınamaz.`}
+      confirmText="Sil"
+      isDestructive={true}
+    />
+  );
+};
 
 const TrackingPage = () => {
   const [tab, setTab] = useState(0);
@@ -75,10 +150,27 @@ const TrackingPage = () => {
     | EditSupplierTransactionData
     | EditCurrencyTransactionData
   >({});
+
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [deleteType, setDeleteType] = useState<
     "transaction" | "supplierTransaction" | "currencyTransaction" | null
   >(null);
+
+  const [endDayConfirmOpen, setEndDayConfirmOpen] = useState(false);
+  const [dailyCashRecordToDeleteId, setDailyCashRecordToDeleteId] = useState<
+    string | null
+  >(null);
+
+  const [initialCash, setInitialCash] = useState(0);
+  const [newInitialCash, setNewInitialCash] = useState<number | string>("");
+  const [dailyCashRecords, setDailyCashRecords] = useState<DailyCashRecord[]>(
+    []
+  );
+  const [endDayModalOpen, setEndDayModalOpen] = useState(false);
+  const [endDaySummary, setEndDaySummary] = useState({
+    date: "",
+    finalCash: 0,
+  });
 
   useEffect(() => {
     async function fetchData() {
@@ -88,24 +180,49 @@ const TrackingPage = () => {
       setSupplierTransactions(fetchedSupplierTransactions);
       const fetchedCurrencyTransactions = await getCurrencyTransactions();
       setCurrencyTransactions(fetchedCurrencyTransactions);
-
-      console.log("--- Firebase'den Çekilen Veriler ---");
-      console.log("Transactions (Kasa İşlemleri):", fetchedTransactions);
-      console.log(
-        "Supplier Transactions (Toptancı İşlemleri):",
-        fetchedSupplierTransactions
-      );
-      console.log(
-        "Currency Transactions (Döviz İşlemleri):",
-        fetchedCurrencyTransactions
-      );
-      console.log("-------------------------------------");
     }
     fetchData();
+
+    const savedInitialCash = localStorage.getItem("initialCashBalance");
+    if (savedInitialCash) {
+      setInitialCash(Number(savedInitialCash));
+    }
+
+    const savedRecords = localStorage.getItem("dailyCashRecords");
+    if (savedRecords) {
+      setDailyCashRecords(JSON.parse(savedRecords));
+    }
   }, [getTransactions, getSupplierTransactions, getCurrencyTransactions]);
 
-  const safeFormDate = (date: string | undefined): string => {
-    return date ? formDate(date) : "";
+  const safeFormDate = (date: string | Timestamp | undefined): string => {
+    return formDate(date);
+  };
+
+  const isEditable = (date: string | Timestamp | undefined): boolean => {
+    if (!date) return false;
+
+    const recordDateString = safeFormDate(date);
+    const recordDateTime = new Date(recordDateString).getTime();
+
+    const now = new Date();
+    const todayStart = new Date(
+      now.getFullYear(),
+      now.getMonth(),
+      now.getDate()
+    ).getTime();
+
+    return recordDateTime >= todayStart;
+  };
+
+  const handleSaveInitialCash = () => {
+    const cashAmount = Number(newInitialCash);
+    if (!isNaN(cashAmount)) {
+      setInitialCash(cashAmount);
+      localStorage.setItem("initialCashBalance", cashAmount.toString());
+      setNewInitialCash("");
+    } else {
+      alert("Lütfen geçerli bir tutar girin.");
+    }
   };
 
   const filteredTransactions = useMemo(() => {
@@ -113,7 +230,9 @@ const TrackingPage = () => {
     const filterValue = filterDate || filterMonth;
 
     return transactions.filter((t) => {
-      const transactionDate = safeFormDate(t.date);
+      const transactionDate = safeFormDate(
+        t.date as string | Timestamp | undefined
+      );
 
       let matchesDateOrMonth = true;
 
@@ -140,7 +259,9 @@ const TrackingPage = () => {
     const filterValue = filterDate || filterMonth;
 
     return supplierTransactions.filter((s) => {
-      const transactionDate = safeFormDate(s.date);
+      const transactionDate = safeFormDate(
+        s.date as string | Timestamp | undefined
+      );
 
       let matchesDateOrMonth = true;
 
@@ -170,7 +291,9 @@ const TrackingPage = () => {
     const filterValue = filterDate || filterMonth;
 
     return currencyTransactions.filter((c) => {
-      const transactionDate = safeFormDate(c.date);
+      const transactionDate = safeFormDate(
+        c.date as string | Timestamp | undefined
+      );
 
       let matchesDateOrMonth = true;
 
@@ -194,6 +317,22 @@ const TrackingPage = () => {
     });
   }, [currencyTransactions, filterDate, filterMonth, searchQuery]);
 
+  const filteredDailyCashRecords = useMemo(() => {
+    const filterValue = filterDate || filterMonth;
+    if (!filterValue) {
+      return dailyCashRecords;
+    }
+
+    return dailyCashRecords.filter((r) => {
+      if (filterDate) {
+        return r.date === filterDate;
+      } else if (filterMonth) {
+        return r.date.startsWith(filterMonth);
+      }
+      return true;
+    });
+  }, [dailyCashRecords, filterDate, filterMonth]);
+
   const dailySalesTotal = useMemo(() => {
     return filteredTransactions
       .filter((t) => t.type === "Satış")
@@ -213,7 +352,11 @@ const TrackingPage = () => {
   const monthlySalesTotal = useMemo(() => {
     if (!filterMonth) return 0;
     return transactions
-      .filter((t) => safeFormDate(t.date).startsWith(filterMonth))
+      .filter((t) =>
+        safeFormDate(t.date as string | Timestamp | undefined).startsWith(
+          filterMonth
+        )
+      )
       .filter((t) => t.type === "Satış")
       .reduce((sum, t) => sum + t.amount, 0);
   }, [transactions, filterMonth]);
@@ -221,7 +364,11 @@ const TrackingPage = () => {
   const monthlyTotalExpensesForCashTracking = useMemo(() => {
     if (!filterMonth) return 0;
     return transactions
-      .filter((t) => safeFormDate(t.date).startsWith(filterMonth))
+      .filter((t) =>
+        safeFormDate(t.date as string | Timestamp | undefined).startsWith(
+          filterMonth
+        )
+      )
       .filter((t) => t.type === "Alış")
       .reduce((sum, t) => sum + t.amount, 0);
   }, [transactions, filterMonth]);
@@ -254,13 +401,56 @@ const TrackingPage = () => {
     return { totalAmount, totalTL };
   }, [filteredCurrencyTransactions]);
 
+  const cashFlowTotals = useMemo(() => {
+    const transactionsCashTotal = filteredTransactions.reduce((sum, t) => {
+      if (t.method === "Nakit") {
+        if (t.type === "Satış") {
+          return sum + t.amount;
+        } else if (t.type === "Alış") {
+          return sum - t.amount;
+        }
+      }
+      return sum;
+    }, 0);
+
+    const supplierCashTotal = filteredSupplierTransactions.reduce((sum, s) => {
+      if (s.paymentMethod === "Nakit") {
+        return sum - s.paid;
+      }
+      return sum;
+    }, 0);
+
+    const currencyCashTotal = filteredCurrencyTransactions.reduce((sum, c) => {
+      if (c.type === "Alış") {
+        return sum - c.total;
+      } else if (c.type === "Satış") {
+        return sum + c.total;
+      }
+      return sum;
+    }, 0);
+
+    const totalCashMovement =
+      transactionsCashTotal + supplierCashTotal + currencyCashTotal;
+    const finalCashBalance = initialCash + totalCashMovement;
+
+    return {
+      totalCashMovement,
+      finalCashBalance,
+    };
+  }, [
+    filteredTransactions,
+    filteredSupplierTransactions,
+    filteredCurrencyTransactions,
+    initialCash,
+  ]);
+
   const handleEdit = (
     type: "transaction" | "supplierTransaction" | "currencyTransaction",
     data: any
   ) => {
     setEditType(type);
     setEditId(data.id);
-    setEditData({ ...data, date: data.date ? formDate(data.date) : "" });
+    setEditData({ ...data, date: formDate(data.date) });
   };
 
   const handleUpdate = async () => {
@@ -293,6 +483,55 @@ const TrackingPage = () => {
     }
   };
 
+  const handleEndDayInitiate = () => {
+    setEndDayConfirmOpen(true);
+  };
+
+  const handleEndDay = () => {
+    setEndDayConfirmOpen(false);
+
+    const today = new Date().toISOString().split("T")[0];
+
+    const alreadyRecorded = dailyCashRecords.some((r) => r.date === today);
+
+    if (alreadyRecorded) {
+      const confirmOverwrite = window.confirm(
+        "Bu gün için zaten bir kapanış kaydı yapılmış. Önceki kayıt silinip yeni kayıt yapılacaktır. Onaylıyor musunuz?"
+      );
+      if (!confirmOverwrite) {
+        return;
+      }
+    }
+
+    const newRecord: DailyCashRecord = {
+      id: Date.now().toString(),
+      date: today,
+      initialCash: initialCash,
+      finalCash: cashFlowTotals.finalCashBalance,
+      totalMovement: cashFlowTotals.totalCashMovement,
+    };
+
+    let updatedRecords: DailyCashRecord[];
+    if (alreadyRecorded) {
+      updatedRecords = dailyCashRecords.filter((r) => r.date !== today);
+      updatedRecords.push(newRecord);
+    } else {
+      updatedRecords = [...dailyCashRecords, newRecord];
+    }
+
+    setDailyCashRecords(updatedRecords);
+    localStorage.setItem("dailyCashRecords", JSON.stringify(updatedRecords));
+
+    setInitialCash(newRecord.finalCash);
+    localStorage.setItem("initialCashBalance", newRecord.finalCash.toString());
+
+    setEndDaySummary({ date: today, finalCash: newRecord.finalCash });
+    setEndDayModalOpen(true);
+
+    setFilterDate("");
+    setFilterMonth("");
+  };
+
   const handleDelete = async () => {
     if (!deleteId || !deleteType) return;
 
@@ -307,12 +546,44 @@ const TrackingPage = () => {
         await deleteCurrencyTransaction(deleteId);
         setCurrencyTransactions(await getCurrencyTransactions());
       }
-      alert("Kayıt başarıyla silindi!");
     } catch (error) {
-      console.error("Kayıt silinirken hata:", error);
     } finally {
       setDeleteId(null);
       setDeleteType(null);
+    }
+  };
+
+  const handleCloseDeleteDialog = () => {
+    setDeleteId(null);
+    setDeleteType(null);
+  };
+
+  const handleDailyCashRecordDeleteInitiate = (id: string) => {
+    setDailyCashRecordToDeleteId(id);
+  };
+
+  const handleDeleteDailyCashRecord = () => {
+    if (!dailyCashRecordToDeleteId) return;
+
+    const id = dailyCashRecordToDeleteId;
+
+    const updatedRecords = dailyCashRecords.filter((r) => r.id !== id);
+    setDailyCashRecords(updatedRecords);
+    localStorage.setItem("dailyCashRecords", JSON.stringify(updatedRecords));
+
+    setDailyCashRecordToDeleteId(null);
+
+    if (
+      updatedRecords.length > 0 &&
+      id ===
+        dailyCashRecords.reduce((a, b) =>
+          new Date(a.date) > new Date(b.date) ? a : b
+        ).id
+    ) {
+      console.warn("Sistemdeki initialCash manuel olarak düzeltilmeli.");
+    } else if (updatedRecords.length === 0) {
+      setInitialCash(0);
+      localStorage.setItem("initialCashBalance", "0");
     }
   };
 
@@ -341,6 +612,7 @@ const TrackingPage = () => {
           <Tab label="Kasa ve Finans Takibi" />
           <Tab label="Toptancı İşlemleri" />
           <Tab label="Döviz İşlemleri" />
+          <Tab label="Kasa" />
         </Tabs>
         <Box sx={{ display: "flex", gap: 2, mb: 2, flexWrap: "wrap" }}>
           <TextField
@@ -451,25 +723,31 @@ const TrackingPage = () => {
                       <TableCell>{r.description}</TableCell>
                       <TableCell align="right">{r.amount.toFixed(2)}</TableCell>
                       <TableCell align="center">
-                        {safeFormDate(r.date)}
+                        {safeFormDate(r.date as string | Timestamp | undefined)}
                       </TableCell>
                       <TableCell align="center">{r.method}</TableCell>
                       <TableCell align="center">
-                        <IconButton
-                          size="small"
-                          onClick={() => handleEdit("transaction", r)}
-                        >
-                          <EditIcon />
-                        </IconButton>
-                        <IconButton
-                          size="small"
-                          onClick={() => {
-                            setDeleteType("transaction");
-                            setDeleteId(r.id);
-                          }}
-                        >
-                          <DeleteIcon color="error" />
-                        </IconButton>
+                        {isEditable(
+                          r.date as string | Timestamp | undefined
+                        ) && (
+                          <>
+                            <IconButton
+                              size="small"
+                              onClick={() => handleEdit("transaction", r)}
+                            >
+                              <EditIcon />
+                            </IconButton>
+                            <IconButton
+                              size="small"
+                              onClick={() => {
+                                setDeleteType("transaction");
+                                setDeleteId(r.id);
+                              }}
+                            >
+                              <DeleteIcon color="error" />
+                            </IconButton>
+                          </>
+                        )}
                       </TableCell>
                     </TableRow>
                   ))}
@@ -509,7 +787,9 @@ const TrackingPage = () => {
                 <TableBody>
                   {filteredSupplierTransactions.map((r) => (
                     <TableRow key={r.id}>
-                      <TableCell>{safeFormDate(r.date)}</TableCell>
+                      <TableCell>
+                        {safeFormDate(r.date as string | Timestamp | undefined)}
+                      </TableCell>
                       <TableCell>{r.supplierName}</TableCell>
                       <TableCell>{r.productName}</TableCell>
                       <TableCell>{r.quantity}</TableCell>
@@ -519,21 +799,29 @@ const TrackingPage = () => {
                         {(r.total - r.paid).toFixed(2)}
                       </TableCell>
                       <TableCell align="center">
-                        <IconButton
-                          size="small"
-                          onClick={() => handleEdit("supplierTransaction", r)}
-                        >
-                          <EditIcon />
-                        </IconButton>
-                        <IconButton
-                          size="small"
-                          onClick={() => {
-                            setDeleteType("supplierTransaction");
-                            setDeleteId(r.id);
-                          }}
-                        >
-                          <DeleteIcon color="error" />
-                        </IconButton>
+                        {isEditable(
+                          r.date as string | Timestamp | undefined
+                        ) && (
+                          <>
+                            <IconButton
+                              size="small"
+                              onClick={() =>
+                                handleEdit("supplierTransaction", r)
+                              }
+                            >
+                              <EditIcon />
+                            </IconButton>
+                            <IconButton
+                              size="small"
+                              onClick={() => {
+                                setDeleteType("supplierTransaction");
+                                setDeleteId(r.id);
+                              }}
+                            >
+                              <DeleteIcon color="error" />
+                            </IconButton>
+                          </>
+                        )}
                       </TableCell>
                     </TableRow>
                   ))}
@@ -570,7 +858,9 @@ const TrackingPage = () => {
                 <TableBody>
                   {filteredCurrencyTransactions.map((r) => (
                     <TableRow key={r.id}>
-                      <TableCell>{safeFormDate(r.date)}</TableCell>
+                      <TableCell>
+                        {safeFormDate(r.date as string | Timestamp | undefined)}
+                      </TableCell>
                       <TableCell>{r.name}</TableCell>
                       <TableCell>{r.tc}</TableCell>
                       <TableCell>{r.type}</TableCell>
@@ -578,21 +868,29 @@ const TrackingPage = () => {
                       <TableCell align="right">{r.rate.toFixed(4)}</TableCell>
                       <TableCell align="right">{r.total.toFixed(2)}</TableCell>
                       <TableCell align="center">
-                        <IconButton
-                          size="small"
-                          onClick={() => handleEdit("currencyTransaction", r)}
-                        >
-                          <EditIcon />
-                        </IconButton>
-                        <IconButton
-                          size="small"
-                          onClick={() => {
-                            setDeleteType("currencyTransaction");
-                            setDeleteId(r.id as string);
-                          }}
-                        >
-                          <DeleteIcon color="error" />
-                        </IconButton>
+                        {isEditable(
+                          r.date as string | Timestamp | undefined
+                        ) && (
+                          <>
+                            <IconButton
+                              size="small"
+                              onClick={() =>
+                                handleEdit("currencyTransaction", r)
+                              }
+                            >
+                              <EditIcon />
+                            </IconButton>
+                            <IconButton
+                              size="small"
+                              onClick={() => {
+                                setDeleteType("currencyTransaction");
+                                setDeleteId(r.id as string);
+                              }}
+                            >
+                              <DeleteIcon color="error" />
+                            </IconButton>
+                          </>
+                        )}
                       </TableCell>
                     </TableRow>
                   ))}
@@ -601,217 +899,223 @@ const TrackingPage = () => {
             </TableContainer>
           </>
         )}
-        <Dialog
-          open={!!editId}
-          onClose={() => {
-            setEditId(null);
-            setEditType(null);
-            setEditData({});
-          }}
-          maxWidth="sm"
-          fullWidth
-        >
-          <DialogTitle>
-            {editType === "transaction"
-              ? "İşlem Kaydını Düzenle"
-              : editType === "supplierTransaction"
-              ? "Toptancı İşlemi Kaydını Düzenle"
-              : "Döviz İşlemi Kaydını Düzenle"}{" "}
-          </DialogTitle>
-          <DialogContent
-            sx={{ display: "flex", flexDirection: "column", gap: 2, mt: 1 }}
-          >
-            {editType === "transaction" ? (
-              <>
-                <FormControl fullWidth>
-                  <InputLabel>Tip</InputLabel>
-                  <Select
-                    label="Tip"
-                    value={(editData as EditTransactionData).type || ""}
-                    onChange={(e) =>
-                      setEditData({
-                        ...editData,
-                        type: e.target.value as "Satış" | "Alış",
-                      })
-                    }
-                  >
-                    <MenuItem value="Alış">Alış</MenuItem>
-                    <MenuItem value="Satış">Satış</MenuItem>
-                  </Select>
-                </FormControl>
+        {tab === 3 && (
+          <Box sx={{ p: 3 }}>
+            <Typography variant="h6" gutterBottom>
+              Kasa Nakit Takibi
+            </Typography>
+
+            <Paper elevation={3} sx={{ p: 3, mb: 3, bgcolor: "#f5f5f5" }}>
+              <Typography variant="subtitle1" fontWeight={600} mb={2}>
+                Gün Başı Nakit Girişi 💰
+              </Typography>
+              <Box sx={{ display: "flex", gap: 2, alignItems: "center" }}>
                 <TextField
-                  label="Açıklama"
-                  value={(editData as EditTransactionData).description || ""}
-                  onChange={(e) =>
-                    setEditData({ ...editData, description: e.target.value })
-                  }
-                />
-                <TextField
-                  label="Tutar"
+                  label="Gün Başı Nakit Tutar (TL)"
                   type="number"
-                  value={(editData as EditTransactionData).amount ?? ""}
-                  onChange={(e) =>
-                    setEditData({ ...editData, amount: Number(e.target.value) })
-                  }
-                />
-                <TextField
-                  label="Tarih"
-                  type="date"
+                  fullWidth
+                  value={newInitialCash}
+                  onChange={(e) => setNewInitialCash(e.target.value)}
                   InputLabelProps={{ shrink: true }}
-                  value={(editData as EditTransactionData).date || ""}
-                  onChange={(e) =>
-                    setEditData({ ...editData, date: e.target.value })
-                  }
                 />
-                <FormControl fullWidth>
-                  <InputLabel>Yöntem</InputLabel>
-                  <Select
-                    label="Yöntem"
-                    value={(editData as EditTransactionData).method || ""}
-                    onChange={(e) =>
-                      setEditData({
-                        ...editData,
-                        method: e.target.value as
-                          | "Nakit"
-                          | "Kredi Kartı"
-                          | "Pos",
-                      })
-                    }
-                  >
-                    <MenuItem value="Nakit">Nakit</MenuItem>
-                    <MenuItem value="Kredi Kartı">Kredi Kartı</MenuItem>
-                    <MenuItem value="Pos">Pos</MenuItem>
-                  </Select>
-                </FormControl>
-              </>
-            ) : editType === "supplierTransaction" ? (
-              <>
-                <TextField
-                  label="Tutar"
-                  type="number"
-                  value={(editData as EditSupplierTransactionData).total ?? ""}
-                  onChange={(e) =>
-                    setEditData({ ...editData, total: Number(e.target.value) })
-                  }
-                />
-                <TextField
-                  label="Ödenen"
-                  type="number"
-                  value={(editData as EditSupplierTransactionData).paid ?? ""}
-                  onChange={(e) =>
-                    setEditData({ ...editData, paid: Number(e.target.value) })
-                  }
-                />
-                <TextField
-                  label="Tarih"
-                  type="date"
-                  InputLabelProps={{ shrink: true }}
-                  value={(editData as EditSupplierTransactionData).date || ""}
-                  onChange={(e) =>
-                    setEditData({ ...editData, date: e.target.value })
-                  }
-                />
-              </>
-            ) : (
-              <>
-                <TextField
-                  label="Adı"
-                  value={(editData as EditCurrencyTransactionData).name || ""}
-                  onChange={(e) =>
-                    setEditData({ ...editData, name: e.target.value })
-                  }
-                />
-                <TextField
-                  label="TC"
-                  value={(editData as EditCurrencyTransactionData).tc || ""}
-                  onChange={(e) =>
-                    setEditData({ ...editData, tc: e.target.value })
-                  }
-                />
-                <TextField
-                  label="Miktar"
-                  type="number"
-                  value={(editData as EditCurrencyTransactionData).amount ?? ""}
-                  onChange={(e) =>
-                    setEditData({ ...editData, amount: Number(e.target.value) })
-                  }
-                />
-                <TextField
-                  label="Kur"
-                  type="number"
-                  value={(editData as EditCurrencyTransactionData).rate ?? ""}
-                  onChange={(e) =>
-                    setEditData({ ...editData, rate: Number(e.target.value) })
-                  }
-                />
-                <TextField
-                  label="Tip"
-                  value={(editData as EditCurrencyTransactionData).type || ""}
-                  onChange={(e) =>
-                    setEditData({ ...editData, type: e.target.value })
-                  }
-                />
-                <TextField
-                  label="Tarih"
-                  type="date"
-                  InputLabelProps={{ shrink: true }}
-                  value={(editData as EditCurrencyTransactionData).date || ""}
-                  onChange={(e) =>
-                    setEditData({ ...editData, date: e.target.value })
-                  }
-                />
-                <TextField
-                  label="Toplam TL"
-                  type="number"
-                  value={(editData as EditCurrencyTransactionData).total ?? ""}
-                  onChange={(e) =>
-                    setEditData({ ...editData, total: Number(e.target.value) })
-                  }
-                />
-              </>
-            )}
-          </DialogContent>
-          <DialogActions>
-            <Button
-              onClick={() => {
-                setEditId(null);
-                setEditType(null);
-                setEditData({});
-              }}
-            >
-              İptal
-            </Button>
-            <Button variant="contained" onClick={handleUpdate}>
-              Kaydet
-            </Button>
-          </DialogActions>
-        </Dialog>
-        <Dialog
-          open={!!deleteId}
-          onClose={() => {
-            setDeleteId(null);
-            setDeleteType(null);
-          }}
-        >
-          <DialogTitle>Kayıt Sil</DialogTitle>
-          <DialogContent>
-            <Typography>Bu kaydı silmek istediğinize emin misiniz?</Typography>
-          </DialogContent>
-          <DialogActions>
-            <Button
-              onClick={() => {
-                setDeleteId(null);
-                setDeleteType(null);
-              }}
-            >
-              İptal
-            </Button>
-            <Button color="error" onClick={handleDelete}>
-              Sil
-            </Button>
-          </DialogActions>
-        </Dialog>
+                <Button
+                  variant="contained"
+                  onClick={handleSaveInitialCash}
+                  sx={{ minWidth: 150, height: 56 }}
+                >
+                  Kaydet
+                </Button>
+              </Box>
+              <Typography
+                variant="body1"
+                mt={2}
+                fontWeight={700}
+                color="primary.main"
+              >
+                Mevcut Gün Başı Bakiyesi: {initialCash.toFixed(2)} TL
+              </Typography>
+            </Paper>
+
+            <Paper elevation={3} sx={{ p: 3, mb: 3, bgcolor: "#e8f5e9" }}>
+              <Box
+                sx={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  mb: 2,
+                }}
+              >
+                <Typography variant="h6" fontWeight={700}>
+                  Günlük Nakit Akış Özeti
+                </Typography>
+                <Button
+                  variant="contained"
+                  color="error"
+                  onClick={handleEndDayInitiate}
+                >
+                  GÜNÜ BİTİR ve KASAYI KAPAT
+                </Button>
+              </Box>
+
+              <Typography variant="body1" color="primary.main" fontWeight={700}>
+                Gün Başı Nakit: {initialCash.toFixed(2)} TL
+              </Typography>
+              <Typography variant="body1" color="success.main" fontWeight={700}>
+                Gün İçi Toplam Nakit Hareketi:{" "}
+                {cashFlowTotals.totalCashMovement.toFixed(2)} TL
+              </Typography>
+              <Typography
+                variant="h5"
+                mt={2}
+                fontWeight={700}
+                color={
+                  cashFlowTotals.finalCashBalance >= 0
+                    ? "success.dark"
+                    : "error.dark"
+                }
+              >
+                Gün Sonu Nakit Bakiyesi:{" "}
+                {cashFlowTotals.finalCashBalance.toFixed(2)} TL
+              </Typography>
+
+              <Box sx={{ mt: 2, pt: 2, borderTop: "1px solid #ddd" }}>
+                <Typography variant="subtitle2" fontWeight={600}>
+                  Nakit Giriş/Çıkış Özeti (Sadece İşlem Sekmesinden)
+                </Typography>
+                <Typography color="success.main">
+                  Nakit Giren (Satış): +{dailySalesTotal.toFixed(2)} TL
+                </Typography>
+                <Typography color="error.main">
+                  Nakit Çıkan (Alış/Gider): -
+                  {dailyTotalExpensesForCashTracking.toFixed(2)} TL
+                </Typography>
+                <Typography variant="caption" display="block">
+                  *Toptancı ve Döviz hareketleri de üstteki 'Toplam Nakit
+                  Hareketi'ne dahildir.
+                </Typography>
+              </Box>
+            </Paper>
+
+            <Typography variant="h6" mt={4} mb={2}>
+              Geçmiş Kasa Kapanışları
+            </Typography>
+            <TableContainer component={Paper}>
+              <Table>
+                <TableHead>
+                  <TableRow>
+                    <TableCell>Tarih</TableCell>
+                    <TableCell align="right">Gün Başı</TableCell>
+                    <TableCell align="right">Nakit Hareketi</TableCell>
+                    <TableCell align="right">Gün Sonu</TableCell>
+                    <TableCell align="center">İşlemler</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {filteredDailyCashRecords
+                    .sort(
+                      (a, b) =>
+                        new Date(b.date).getTime() - new Date(a.date).getTime()
+                    )
+                    .map((r) => (
+                      <TableRow key={r.id}>
+                        <TableCell>{r.date}</TableCell>
+                        <TableCell align="right">
+                          {r.initialCash.toFixed(2)} TL
+                        </TableCell>
+                        <TableCell align="right">
+                          {r.totalMovement.toFixed(2)} TL
+                        </TableCell>
+                        <TableCell align="right">
+                          {r.finalCash.toFixed(2)} TL
+                        </TableCell>
+                        <TableCell align="center">
+                          <IconButton
+                            size="small"
+                            onClick={() =>
+                              alert(
+                                `Kasa kaydı (${r.date}) için düzenleme karmaşık bir hesaplama gerektirir ve şu an desteklenmemektedir.`
+                              )
+                            }
+                          >
+                            <EditIcon />
+                          </IconButton>
+                          <IconButton
+                            size="small"
+                            onClick={() =>
+                              handleDailyCashRecordDeleteInitiate(r.id)
+                            }
+                          >
+                            <DeleteIcon color="error" />
+                          </IconButton>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          </Box>
+        )}
       </Paper>
+
+      <DeleteConfirmationDialog
+        open={!!deleteId && !!deleteType}
+        onClose={handleCloseDeleteDialog}
+        onConfirm={handleDelete}
+        type={deleteType}
+      />
+
+      <CriticalConfirmationDialog
+        open={endDayConfirmOpen}
+        onClose={() => setEndDayConfirmOpen(false)}
+        onConfirm={handleEndDay}
+        title="Günü Kapatma Onayı"
+        message={`Gün sonu kasasını kapatmak üzeresiniz. Gün Sonu Bakiyesi ${cashFlowTotals.finalCashBalance.toFixed(
+          2
+        )} TL olarak kaydedilecek ve bir sonraki günün başlangıç bakiyesi olacaktır. Onaylıyor musunuz?`}
+        confirmText="Kapat ve Kaydet"
+      />
+
+      <CriticalConfirmationDialog
+        open={!!dailyCashRecordToDeleteId}
+        onClose={() => setDailyCashRecordToDeleteId(null)}
+        onConfirm={handleDeleteDailyCashRecord}
+        title="Kasa Kapanış Kaydı Silme"
+        message="Bu kasa kapanış kaydını silmek, bir sonraki günün günbaşı bakiyesini etkileyebilir ve manuel düzeltme gerektirebilir. Silmek istediğinizden emin misiniz?"
+        confirmText="Kayıdı Sil"
+        isDestructive={true}
+      />
+
+      <Dialog open={!!editId}>
+        <DialogTitle>Kayıt Düzenle</DialogTitle>
+        <DialogContent>
+          <Typography>Düzenleme formu burada olmalı.</Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setEditId(null)}>İptal</Button>
+          <Button onClick={handleUpdate} variant="contained">
+            Kaydet
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog open={endDayModalOpen} onClose={() => setEndDayModalOpen(false)}>
+        <DialogTitle>Kasa Kapanışı Başarılı 🎉</DialogTitle>
+        <DialogContent dividers>
+          <Typography variant="body1" gutterBottom>
+            **{endDaySummary.date}** tarihi için kasa kapanışı yapıldı.
+          </Typography>
+          <Typography variant="h6" color="success.dark" fontWeight={700}>
+            Gün Sonu Nakit Bakiyesi: {endDaySummary.finalCash.toFixed(2)} TL
+          </Typography>
+          <Typography variant="body2" sx={{ mt: 1 }}>
+            Bu tutar, bir sonraki günün **Gün Başı Nakit Bakiyesi** olarak
+            ayarlandı.
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setEndDayModalOpen(false)}>Tamam</Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 };
