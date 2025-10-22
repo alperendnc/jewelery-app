@@ -108,6 +108,14 @@ export interface CurrencyTransaction {
   total: number;
 }
 
+export interface DailyCashRecord {
+  id: string;
+  date: string;
+  initialCash: number;
+  finalCash: number;
+  totalMovement: number;
+}
+
 interface AuthContextType {
   addProduct: (product: Omit<Product, "id" | "createdAt">) => Promise<void>;
   getProducts: () => Promise<Product[]>;
@@ -161,6 +169,12 @@ interface AuthContextType {
     id: string,
     updatedFields: Partial<CurrencyTransaction>
   ) => Promise<void>;
+
+  getInitialCash: () => Promise<number>;
+  setInitialCash: (value: number) => Promise<void>;
+  getDailyCashRecords: () => Promise<DailyCashRecord[]>;
+  addOrUpdateDailyCashRecord: (record: DailyCashRecord) => Promise<void>;
+  deleteDailyCashRecord: (id: string) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -458,7 +472,6 @@ export function AuthProvider({ children }: AuthProviderProps) {
       return {
         ...data,
         id: doc.id,
-
         date: formatDateToDDMMYYYY(data.date),
       };
     });
@@ -565,7 +578,6 @@ export function AuthProvider({ children }: AuthProviderProps) {
             boughtItem: purchase.productName,
             tc: purchase.customer.tc,
             phone: purchase.customer.phone,
-
             createdAt: new Date(),
             debt: 0,
           };
@@ -637,6 +649,90 @@ export function AuthProvider({ children }: AuthProviderProps) {
     await setDoc(ref, updatedFields, { merge: true });
   };
 
+  const cashDocRefForUser = (uid: string) => doc(db, "cash", uid);
+  const dailyRecordsCollectionForUser = (uid: string) =>
+    collection(db, "cash", uid, "dailyCashRecords");
+
+  const getInitialCash = async (): Promise<number> => {
+    const uid = auth.currentUser?.uid || currentUser?.uid;
+    if (!uid) return 0;
+    try {
+      const snap = await getDoc(cashDocRefForUser(uid));
+      if (!snap.exists()) return 0;
+      const data = snap.data();
+      return typeof data?.initialCash === "number" ? data.initialCash : 0;
+    } catch (err) {
+      console.error("getInitialCash error:", err);
+      return 0;
+    }
+  };
+
+  const setInitialCash = async (value: number) => {
+    const uid = auth.currentUser?.uid || currentUser?.uid;
+    if (!uid) throw new Error("Kullanıcı giriş yapmamış.");
+    try {
+      await setDoc(
+        cashDocRefForUser(uid),
+        {
+          initialCash: value,
+          updatedAt: new Date(),
+        },
+        { merge: true }
+      );
+    } catch (err) {
+      console.error("setInitialCash error:", err);
+      throw err;
+    }
+  };
+
+  const getDailyCashRecords = async (): Promise<DailyCashRecord[]> => {
+    const uid = auth.currentUser?.uid || currentUser?.uid;
+    if (!uid) return [];
+    try {
+      const qSnap = await getDocs(dailyRecordsCollectionForUser(uid));
+      return qSnap.docs.map((d) => ({
+        id: d.id,
+        ...(d.data() as Omit<DailyCashRecord, "id">),
+      }));
+    } catch (err) {
+      console.error("getDailyCashRecords error:", err);
+      return [];
+    }
+  };
+
+  const addOrUpdateDailyCashRecord = async (record: DailyCashRecord) => {
+    const uid = auth.currentUser?.uid || currentUser?.uid;
+    if (!uid) throw new Error("Kullanıcı giriş yapmamış.");
+    try {
+      const ref = doc(dailyRecordsCollectionForUser(uid), record.id);
+      await setDoc(
+        ref,
+        {
+          date: record.date,
+          initialCash: record.initialCash,
+          finalCash: record.finalCash,
+          totalMovement: record.totalMovement,
+        },
+        { merge: true }
+      );
+    } catch (err) {
+      console.error("addOrUpdateDailyCashRecord error:", err);
+      throw err;
+    }
+  };
+
+  const deleteDailyCashRecord = async (id: string) => {
+    const uid = auth.currentUser?.uid || currentUser?.uid;
+    if (!uid) throw new Error("Kullanıcı giriş yapmamış.");
+    try {
+      const ref = doc(dailyRecordsCollectionForUser(uid), id);
+      await deleteDoc(ref);
+    } catch (err) {
+      console.error("deleteDailyCashRecord error:", err);
+      throw err;
+    }
+  };
+
   return (
     <AuthContext.Provider
       value={{
@@ -676,6 +772,12 @@ export function AuthProvider({ children }: AuthProviderProps) {
         getCurrencyTransactions,
         deleteCurrencyTransaction,
         updateCurrencyTransaction,
+
+        getInitialCash,
+        setInitialCash,
+        getDailyCashRecords,
+        addOrUpdateDailyCashRecord,
+        deleteDailyCashRecord,
       }}
     >
       {!loading && children}

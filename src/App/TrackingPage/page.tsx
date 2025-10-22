@@ -18,16 +18,25 @@ import {
   DialogActions,
   Button,
   TextField,
+  Grid as MuiGrid,
+  Stack,
+  Tooltip,
+  CircularProgress,
+  Divider,
+  Chip,
 } from "@mui/material";
-
 import MoneyIcon from "@mui/icons-material/AttachMoney";
 import EditIcon from "@mui/icons-material/Edit";
 import DeleteIcon from "@mui/icons-material/Delete";
+import ReceiptLongIcon from "@mui/icons-material/ReceiptLong";
+import AccountBalanceWalletIcon from "@mui/icons-material/AccountBalanceWallet";
+import TrendingUpIcon from "@mui/icons-material/TrendingUp";
 import {
   useAuth,
   Transaction,
   SupplierTransaction,
   CurrencyTransaction,
+  DailyCashRecord,
 } from "src/contexts/UseAuth";
 import formDate from "src/components/formDate";
 import { Timestamp } from "firebase/firestore";
@@ -36,13 +45,76 @@ type EditTransactionData = Partial<Omit<Transaction, "id">>;
 type EditSupplierTransactionData = Partial<Omit<SupplierTransaction, "id">>;
 type EditCurrencyTransactionData = Partial<Omit<CurrencyTransaction, "id">>;
 
-type DailyCashRecord = {
-  id: string;
-  date: string;
-  initialCash: number;
-  finalCash: number;
-  totalMovement: number;
+const formatCurrency = (n: number) =>
+  n.toLocaleString("tr-TR", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }) + " TL";
+
+const smallDate = (d?: string | Timestamp) => {
+  const s = formDate(d);
+  if (!s) return "";
+  return s;
 };
+
+const StatCard = ({
+  title,
+  value,
+  color = "primary",
+  icon,
+  caption,
+}: {
+  title: string;
+  value: string;
+  color?: "primary" | "success" | "error";
+  icon?: React.ReactNode;
+  caption?: string;
+}) => (
+  <Paper
+    elevation={2}
+    sx={{
+      p: 2,
+      display: "flex",
+      alignItems: "center",
+      minWidth: 200,
+      bgcolor: "background.paper",
+    }}
+  >
+    <Box
+      sx={{
+        mr: 2,
+        width: 48,
+        height: 48,
+        borderRadius: 1,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        bgcolor:
+          color === "success"
+            ? "success.light"
+            : color === "error"
+            ? "error.light"
+            : "primary.light",
+        color: `${color}.dark`,
+      }}
+    >
+      {icon}
+    </Box>
+    <Box sx={{ flex: 1 }}>
+      <Typography variant="caption" color="text.secondary">
+        {title}
+      </Typography>
+      <Typography variant="h6" fontWeight={700}>
+        {value}
+      </Typography>
+      {caption && (
+        <Typography variant="caption" color="text.secondary">
+          {caption}
+        </Typography>
+      )}
+    </Box>
+  </Paper>
+);
 
 const CriticalConfirmationDialog = ({
   open,
@@ -68,7 +140,7 @@ const CriticalConfirmationDialog = ({
         <Typography>{message}</Typography>
       </DialogContent>
       <DialogActions>
-        <Button onClick={onClose} color="primary">
+        <Button onClick={onClose} color="inherit">
           İptal
         </Button>
         <Button
@@ -107,7 +179,7 @@ const DeleteConfirmationDialog = ({
       onClose={onClose}
       onConfirm={onConfirm}
       title="Kayıt Silme Onayı"
-      message={`**${title}** türündeki bu kaydı kalıcı olarak silmek istediğinizden emin misiniz? Bu işlem geri alınamaz.`}
+      message={`${title} türündeki bu kaydı kalıcı olarak silmek istediğinizden emin misiniz? Bu işlem geri alınamaz.`}
       confirmText="Sil"
       isDestructive={true}
     />
@@ -115,6 +187,8 @@ const DeleteConfirmationDialog = ({
 };
 
 const TrackingPage = () => {
+  const Grid: any = MuiGrid;
+
   const [tab, setTab] = useState(0);
   const {
     getTransactions,
@@ -126,6 +200,11 @@ const TrackingPage = () => {
     getCurrencyTransactions,
     updateCurrencyTransaction,
     deleteCurrencyTransaction,
+    getInitialCash,
+    setInitialCash,
+    getDailyCashRecords,
+    addOrUpdateDailyCashRecord,
+    deleteDailyCashRecord,
   } = useAuth();
 
   const [transactions, setTransactions] = useState<Transaction[]>([]);
@@ -135,12 +214,9 @@ const TrackingPage = () => {
   const [currencyTransactions, setCurrencyTransactions] = useState<
     CurrencyTransaction[]
   >([]);
-
   const [filterDate, setFilterDate] = useState("");
   const [filterMonth, setFilterMonth] = useState("");
-
   const [searchQuery, setSearchQuery] = useState("");
-
   const [editId, setEditId] = useState<string | null>(null);
   const [editType, setEditType] = useState<
     "transaction" | "supplierTransaction" | "currencyTransaction" | null
@@ -150,18 +226,15 @@ const TrackingPage = () => {
     | EditSupplierTransactionData
     | EditCurrencyTransactionData
   >({});
-
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [deleteType, setDeleteType] = useState<
     "transaction" | "supplierTransaction" | "currencyTransaction" | null
   >(null);
-
   const [endDayConfirmOpen, setEndDayConfirmOpen] = useState(false);
   const [dailyCashRecordToDeleteId, setDailyCashRecordToDeleteId] = useState<
     string | null
   >(null);
-
-  const [initialCash, setInitialCash] = useState(0);
+  const [initialCash, setInitialCashState] = useState(0);
   const [newInitialCash, setNewInitialCash] = useState<number | string>("");
   const [dailyCashRecords, setDailyCashRecords] = useState<DailyCashRecord[]>(
     []
@@ -171,31 +244,87 @@ const TrackingPage = () => {
     date: "",
     finalCash: 0,
   });
+  const [resetBalances, setResetBalances] = useState(false);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    let mounted = true;
+
     async function fetchData() {
-      const fetchedTransactions = await getTransactions();
-      setTransactions(fetchedTransactions);
-      const fetchedSupplierTransactions = await getSupplierTransactions();
-      setSupplierTransactions(fetchedSupplierTransactions);
-      const fetchedCurrencyTransactions = await getCurrencyTransactions();
-      setCurrencyTransactions(fetchedCurrencyTransactions);
+      setLoading(true);
+      try {
+        const [
+          fetchedTransactions,
+          fetchedSupplierTransactions,
+          fetchedCurrencyTransactions,
+        ] = await Promise.all([
+          getTransactions(),
+          getSupplierTransactions(),
+          getCurrencyTransactions(),
+        ]);
+
+        if (!mounted) return;
+        setTransactions(fetchedTransactions);
+        setSupplierTransactions(fetchedSupplierTransactions);
+        setCurrencyTransactions(fetchedCurrencyTransactions);
+
+        const ic = await getInitialCash();
+        if (!mounted) return;
+        setInitialCashState(ic);
+
+        const records = await getDailyCashRecords();
+        if (!mounted) return;
+        setDailyCashRecords(records || []);
+      } catch (err) {
+        console.error("Veri yükleme hatası:", err);
+      } finally {
+        if (mounted) setLoading(false);
+      }
     }
+
     fetchData();
-
-    const savedInitialCash = localStorage.getItem("initialCashBalance");
-    if (savedInitialCash) {
-      setInitialCash(Number(savedInitialCash));
-    }
-
-    const savedRecords = localStorage.getItem("dailyCashRecords");
-    if (savedRecords) {
-      setDailyCashRecords(JSON.parse(savedRecords));
-    }
-  }, [getTransactions, getSupplierTransactions, getCurrencyTransactions]);
+    return () => {
+      mounted = false;
+    };
+  }, [
+    getTransactions,
+    getSupplierTransactions,
+    getCurrencyTransactions,
+    getInitialCash,
+    getDailyCashRecords,
+  ]);
 
   const safeFormDate = (date: string | Timestamp | undefined): string => {
     return formDate(date);
+  };
+
+  const formatDateToYYYYMM = (date: string | Timestamp | undefined): string => {
+    if (!date) return "";
+    if ((date as any)?.toDate instanceof Function) {
+      const d = (date as any).toDate() as Date;
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+    }
+    if (typeof date === "string") {
+      if (/^\d{4}-\d{2}-\d{2}/.test(date)) {
+        return date.slice(0, 7);
+      }
+      const m = date.match(/^(\d{2})-(\d{2})-(\d{4})$/);
+      if (m) {
+        const day = m[1];
+        const month = m[2];
+        const year = m[3];
+        return `${year}-${month}`;
+      }
+      const parsed = Date.parse(date);
+      if (!isNaN(parsed)) {
+        const d = new Date(parsed);
+        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(
+          2,
+          "0"
+        )}`;
+      }
+    }
+    return "";
   };
 
   const isEditable = (date: string | Timestamp | undefined): boolean => {
@@ -214,12 +343,18 @@ const TrackingPage = () => {
     return recordDateTime >= todayStart;
   };
 
-  const handleSaveInitialCash = () => {
+  const handleSaveInitialCash = async () => {
     const cashAmount = Number(newInitialCash);
     if (!isNaN(cashAmount)) {
-      setInitialCash(cashAmount);
-      localStorage.setItem("initialCashBalance", cashAmount.toString());
-      setNewInitialCash("");
+      try {
+        await setInitialCash(cashAmount);
+        setInitialCashState(cashAmount);
+        setNewInitialCash("");
+        setResetBalances(false);
+      } catch (err) {
+        console.error("initial cash kaydedilemedi:", err);
+        alert("Gün başı bakiyesi kaydedilirken hata oluştu.");
+      }
     } else {
       alert("Lütfen geçerli bir tutar girin.");
     }
@@ -233,14 +368,16 @@ const TrackingPage = () => {
       const transactionDate = safeFormDate(
         t.date as string | Timestamp | undefined
       );
+      const transactionYYYYMM = formatDateToYYYYMM(
+        t.date as string | Timestamp | undefined
+      );
 
       let matchesDateOrMonth = true;
-
       if (filterValue) {
         if (filterDate) {
           matchesDateOrMonth = transactionDate === filterValue;
         } else if (filterMonth) {
-          matchesDateOrMonth = transactionDate.startsWith(filterValue);
+          matchesDateOrMonth = transactionYYYYMM === filterValue;
         }
       }
 
@@ -262,14 +399,16 @@ const TrackingPage = () => {
       const transactionDate = safeFormDate(
         s.date as string | Timestamp | undefined
       );
+      const transactionYYYYMM = formatDateToYYYYMM(
+        s.date as string | Timestamp | undefined
+      );
 
       let matchesDateOrMonth = true;
-
       if (filterValue) {
         if (filterDate) {
           matchesDateOrMonth = transactionDate === filterValue;
         } else if (filterMonth) {
-          matchesDateOrMonth = transactionDate.startsWith(filterValue);
+          matchesDateOrMonth = transactionYYYYMM === filterValue;
         }
       }
 
@@ -294,14 +433,16 @@ const TrackingPage = () => {
       const transactionDate = safeFormDate(
         c.date as string | Timestamp | undefined
       );
+      const transactionYYYYMM = formatDateToYYYYMM(
+        c.date as string | Timestamp | undefined
+      );
 
       let matchesDateOrMonth = true;
-
       if (filterValue) {
         if (filterDate) {
           matchesDateOrMonth = transactionDate === filterValue;
         } else if (filterMonth) {
-          matchesDateOrMonth = transactionDate.startsWith(filterValue);
+          matchesDateOrMonth = transactionYYYYMM === filterValue;
         }
       }
 
@@ -319,43 +460,43 @@ const TrackingPage = () => {
 
   const filteredDailyCashRecords = useMemo(() => {
     const filterValue = filterDate || filterMonth;
-    if (!filterValue) {
-      return dailyCashRecords;
-    }
+    if (!filterValue) return dailyCashRecords;
 
     return dailyCashRecords.filter((r) => {
-      if (filterDate) {
-        return r.date === filterDate;
-      } else if (filterMonth) {
-        return r.date.startsWith(filterMonth);
-      }
+      if (filterDate) return r.date === filterDate;
+      if (filterMonth) return r.date.startsWith(filterMonth);
       return true;
     });
   }, [dailyCashRecords, filterDate, filterMonth]);
 
-  const dailySalesTotal = useMemo(() => {
-    return filteredTransactions
-      .filter((t) => t.type === "Satış")
-      .reduce((sum, t) => sum + t.amount, 0);
-  }, [filteredTransactions]);
+  const dailySalesTotal = useMemo(
+    () =>
+      filteredTransactions
+        .filter((t) => t.type === "Satış")
+        .reduce((sum, t) => sum + t.amount, 0),
+    [filteredTransactions]
+  );
 
-  const dailyTotalExpensesForCashTracking = useMemo(() => {
-    return filteredTransactions
-      .filter((t) => t.type === "Alış")
-      .reduce((sum, t) => sum + t.amount, 0);
-  }, [filteredTransactions]);
+  const dailyTotalExpensesForCashTracking = useMemo(
+    () =>
+      filteredTransactions
+        .filter((t) => t.type === "Alış")
+        .reduce((sum, t) => sum + t.amount, 0),
+    [filteredTransactions]
+  );
 
-  const dailyProfit = useMemo(() => {
-    return dailySalesTotal - dailyTotalExpensesForCashTracking;
-  }, [dailySalesTotal, dailyTotalExpensesForCashTracking]);
+  const dailyProfit = useMemo(
+    () => dailySalesTotal - dailyTotalExpensesForCashTracking,
+    [dailySalesTotal, dailyTotalExpensesForCashTracking]
+  );
 
   const monthlySalesTotal = useMemo(() => {
     if (!filterMonth) return 0;
     return transactions
-      .filter((t) =>
-        safeFormDate(t.date as string | Timestamp | undefined).startsWith(
+      .filter(
+        (t) =>
+          formatDateToYYYYMM(t.date as string | Timestamp | undefined) ===
           filterMonth
-        )
       )
       .filter((t) => t.type === "Satış")
       .reduce((sum, t) => sum + t.amount, 0);
@@ -364,18 +505,19 @@ const TrackingPage = () => {
   const monthlyTotalExpensesForCashTracking = useMemo(() => {
     if (!filterMonth) return 0;
     return transactions
-      .filter((t) =>
-        safeFormDate(t.date as string | Timestamp | undefined).startsWith(
+      .filter(
+        (t) =>
+          formatDateToYYYYMM(t.date as string | Timestamp | undefined) ===
           filterMonth
-        )
       )
       .filter((t) => t.type === "Alış")
       .reduce((sum, t) => sum + t.amount, 0);
   }, [transactions, filterMonth]);
 
-  const monthlyProfit = useMemo(() => {
-    return monthlySalesTotal - monthlyTotalExpensesForCashTracking;
-  }, [monthlySalesTotal, monthlyTotalExpensesForCashTracking]);
+  const monthlyProfit = useMemo(
+    () => monthlySalesTotal - monthlyTotalExpensesForCashTracking,
+    [monthlySalesTotal, monthlyTotalExpensesForCashTracking]
+  );
 
   const supplierTotals = useMemo(() => {
     const total = filteredSupplierTransactions.reduce(
@@ -404,28 +546,20 @@ const TrackingPage = () => {
   const cashFlowTotals = useMemo(() => {
     const transactionsCashTotal = filteredTransactions.reduce((sum, t) => {
       if (t.method === "Nakit") {
-        if (t.type === "Satış") {
-          return sum + t.amount;
-        } else if (t.type === "Alış") {
-          return sum - t.amount;
-        }
+        if (t.type === "Satış") return sum + t.amount;
+        if (t.type === "Alış") return sum - t.amount;
       }
       return sum;
     }, 0);
 
     const supplierCashTotal = filteredSupplierTransactions.reduce((sum, s) => {
-      if (s.paymentMethod === "Nakit") {
-        return sum - s.paid;
-      }
+      if (s.paymentMethod === "Nakit") return sum - s.paid;
       return sum;
     }, 0);
 
     const currencyCashTotal = filteredCurrencyTransactions.reduce((sum, c) => {
-      if (c.type === "Alış") {
-        return sum - c.total;
-      } else if (c.type === "Satış") {
-        return sum + c.total;
-      }
+      if (c.type === "Alış") return sum - c.total;
+      if (c.type === "Satış") return sum + c.total;
       return sum;
     }, 0);
 
@@ -443,6 +577,14 @@ const TrackingPage = () => {
     filteredCurrencyTransactions,
     initialCash,
   ]);
+
+  const displayedInitialCash = resetBalances ? 0 : initialCash;
+  const displayedTotalMovement = resetBalances
+    ? 0
+    : cashFlowTotals.totalCashMovement;
+  const displayedFinalCash = resetBalances
+    ? 0
+    : cashFlowTotals.finalCashBalance;
 
   const handleEdit = (
     type: "transaction" | "supplierTransaction" | "currencyTransaction",
@@ -473,9 +615,10 @@ const TrackingPage = () => {
         );
         setCurrencyTransactions(await getCurrencyTransactions());
       }
-      alert("Kayıt başarıyla güncellendi!");
+      console.info("Kayıt başarıyla güncellendi");
     } catch (error) {
       console.error("Kayıt güncellenirken hata:", error);
+      alert("Kayıt güncellenirken hata oluştu.");
     } finally {
       setEditId(null);
       setEditType(null);
@@ -483,53 +626,50 @@ const TrackingPage = () => {
     }
   };
 
-  const handleEndDayInitiate = () => {
-    setEndDayConfirmOpen(true);
-  };
+  const handleEndDayInitiate = () => setEndDayConfirmOpen(true);
 
-  const handleEndDay = () => {
+  const handleEndDay = async () => {
     setEndDayConfirmOpen(false);
-
     const today = new Date().toISOString().split("T")[0];
 
     const alreadyRecorded = dailyCashRecords.some((r) => r.date === today);
-
     if (alreadyRecorded) {
       const confirmOverwrite = window.confirm(
         "Bu gün için zaten bir kapanış kaydı yapılmış. Önceki kayıt silinip yeni kayıt yapılacaktır. Onaylıyor musunuz?"
       );
-      if (!confirmOverwrite) {
-        return;
-      }
+      if (!confirmOverwrite) return;
     }
 
     const newRecord: DailyCashRecord = {
-      id: Date.now().toString(),
+      id: today,
       date: today,
-      initialCash: initialCash,
+      initialCash,
       finalCash: cashFlowTotals.finalCashBalance,
       totalMovement: cashFlowTotals.totalCashMovement,
     };
 
-    let updatedRecords: DailyCashRecord[];
-    if (alreadyRecorded) {
-      updatedRecords = dailyCashRecords.filter((r) => r.date !== today);
-      updatedRecords.push(newRecord);
-    } else {
-      updatedRecords = [...dailyCashRecords, newRecord];
+    try {
+      await addOrUpdateDailyCashRecord(newRecord);
+
+      const updatedRecords = alreadyRecorded
+        ? dailyCashRecords.map((r) => (r.date === today ? newRecord : r))
+        : [...dailyCashRecords, newRecord];
+      setDailyCashRecords(updatedRecords);
+
+      await setInitialCash(0);
+      setInitialCashState(0);
+      setNewInitialCash("");
+      setResetBalances(true);
+
+      setEndDaySummary({ date: today, finalCash: newRecord.finalCash });
+      setEndDayModalOpen(true);
+
+      setFilterDate("");
+      setFilterMonth("");
+    } catch (err) {
+      console.error("Gün sonu kaydı hata:", err);
+      alert("Gün sonu kaydı sırasında hata oluştu.");
     }
-
-    setDailyCashRecords(updatedRecords);
-    localStorage.setItem("dailyCashRecords", JSON.stringify(updatedRecords));
-
-    setInitialCash(newRecord.finalCash);
-    localStorage.setItem("initialCashBalance", newRecord.finalCash.toString());
-
-    setEndDaySummary({ date: today, finalCash: newRecord.finalCash });
-    setEndDayModalOpen(true);
-
-    setFilterDate("");
-    setFilterMonth("");
   };
 
   const handleDelete = async () => {
@@ -547,6 +687,7 @@ const TrackingPage = () => {
         setCurrencyTransactions(await getCurrencyTransactions());
       }
     } catch (error) {
+      console.error("Silme hatası:", error);
     } finally {
       setDeleteId(null);
       setDeleteType(null);
@@ -558,564 +699,747 @@ const TrackingPage = () => {
     setDeleteType(null);
   };
 
-  const handleDailyCashRecordDeleteInitiate = (id: string) => {
+  const handleDailyCashRecordDeleteInitiate = (id: string) =>
     setDailyCashRecordToDeleteId(id);
-  };
 
-  const handleDeleteDailyCashRecord = () => {
+  const handleDeleteDailyCashRecord = async () => {
     if (!dailyCashRecordToDeleteId) return;
-
     const id = dailyCashRecordToDeleteId;
 
-    const updatedRecords = dailyCashRecords.filter((r) => r.id !== id);
-    setDailyCashRecords(updatedRecords);
-    localStorage.setItem("dailyCashRecords", JSON.stringify(updatedRecords));
+    try {
+      await deleteDailyCashRecord(id);
 
-    setDailyCashRecordToDeleteId(null);
+      const updatedRecords = dailyCashRecords.filter((r) => r.id !== id);
+      setDailyCashRecords(updatedRecords);
 
-    if (
-      updatedRecords.length > 0 &&
-      id ===
-        dailyCashRecords.reduce((a, b) =>
-          new Date(a.date) > new Date(b.date) ? a : b
-        ).id
-    ) {
-      console.warn("Sistemdeki initialCash manuel olarak düzeltilmeli.");
-    } else if (updatedRecords.length === 0) {
-      setInitialCash(0);
-      localStorage.setItem("initialCashBalance", "0");
+      setDailyCashRecordToDeleteId(null);
+
+      if (
+        updatedRecords.length > 0 &&
+        id ===
+          dailyCashRecords.reduce((a, b) =>
+            new Date(a.date) > new Date(b.date) ? a : b
+          ).id
+      ) {
+        console.warn("Sistemdeki initialCash manuel olarak düzeltilmeli.");
+      } else if (updatedRecords.length === 0) {
+        await setInitialCash(0);
+        setInitialCashState(0);
+      }
+    } catch (err) {
+      console.error("Kasa kaydı silme hatası:", err);
+      alert("Kasa kaydı silinirken hata oluştu.");
     }
   };
 
+  const EmptyState = ({ message }: { message: string }) => (
+    <Box sx={{ p: 3, textAlign: "center", color: "text.secondary" }}>
+      <Typography>{message}</Typography>
+    </Box>
+  );
+
   return (
     <Box sx={{ mt: 4, display: "flex", justifyContent: "center" }}>
-      <Paper sx={{ p: 4, width: "100%", maxWidth: 1000, borderRadius: 4 }}>
-        <Box
-          sx={{
-            display: "flex",
-            flexDirection: "column",
-            alignItems: "center",
-            mb: 2,
-          }}
-        >
-          <MoneyIcon sx={{ fontSize: 40, color: "#2196f3", mb: 1 }} />
-          <Typography variant="h5" fontWeight={600} mb={2}>
-            Kasa ve Finans Takibi
-          </Typography>
-        </Box>
+      <Paper
+        sx={{
+          p: { xs: 2, sm: 4 },
+          width: "100%",
+          maxWidth: 1200,
+          borderRadius: 3,
+        }}
+      >
+        <Stack spacing={2} alignItems="center" mb={2}>
+          <Stack direction="row" spacing={1} alignItems="center">
+            <MoneyIcon sx={{ fontSize: 36, color: "primary.main" }} />
+            <Typography variant="h5" fontWeight={700}>
+              Kasa ve Finans Takibi
+            </Typography>
+            <Chip label="Canlı" color="success" size="small" sx={{ ml: 1 }} />
+          </Stack>
+
+          <Grid container spacing={2} justifyContent="center">
+            <Grid item xs={12} sm={4}>
+              <StatCard
+                title="Gün Başı Nakit"
+                value={formatCurrency(displayedInitialCash)}
+                color="primary"
+                icon={<AccountBalanceWalletIcon />}
+                caption={`Oturum: ${smallDate()}`}
+              />
+            </Grid>
+
+            <Grid item xs={12} sm={4}>
+              <StatCard
+                title="Toplam Nakit Hareketi"
+                value={formatCurrency(displayedTotalMovement)}
+                color="success"
+                icon={<TrendingUpIcon />}
+                caption={`Satış/Gider özetine göre`}
+              />
+            </Grid>
+
+            <Grid item xs={12} sm={4}>
+              <StatCard
+                title="Gün Sonu Bakiyesi"
+                value={formatCurrency(displayedFinalCash)}
+                color={displayedFinalCash >= 0 ? "success" : "error"}
+                icon={<ReceiptLongIcon />}
+                caption={displayedFinalCash >= 0 ? "Pozitif" : "Negatif"}
+              />
+            </Grid>
+          </Grid>
+        </Stack>
+
         <Tabs
           value={tab}
           onChange={(_, v) => setTab(v)}
           centered
-          sx={{ mb: 3 }}
+          sx={{ mb: 2 }}
+          variant="fullWidth"
         >
-          <Tab label="Kasa ve Finans Takibi" />
-          <Tab label="Toptancı İşlemleri" />
-          <Tab label="Döviz İşlemleri" />
+          <Tab label="İşlemler" />
+          <Tab label="Toptancı" />
+          <Tab label="Döviz" />
           <Tab label="Kasa" />
         </Tabs>
-        <Box sx={{ display: "flex", gap: 2, mb: 2, flexWrap: "wrap" }}>
-          <TextField
-            label="Gün Filtrele"
-            type="date"
-            fullWidth
-            InputLabelProps={{ shrink: true }}
-            value={filterDate}
-            onChange={(e) => {
-              setFilterDate(e.target.value);
-              if (e.target.value) {
-                setFilterMonth("");
-              }
+
+        {loading && (
+          <Box
+            sx={{
+              position: "absolute",
+              left: 0,
+              right: 0,
+              top: 0,
+              bottom: 0,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              background: "rgba(255,255,255,0.6)",
+              zIndex: 5,
             }}
-          />
-          <TextField
-            label="Ay Filtrele"
-            type="month"
-            fullWidth
-            InputLabelProps={{ shrink: true }}
-            value={filterMonth}
-            onChange={(e) => {
-              setFilterMonth(e.target.value);
-              if (e.target.value) {
-                setFilterDate("");
-              }
-            }}
-          />
-        </Box>
-
-        <Box sx={{ mb: 2 }}>
-          <TextField
-            label="Ara..."
-            fullWidth
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            sx={{ mt: 1 }}
-          />
-        </Box>
-
-        {tab === 0 && (
-          <>
-            <Box
-              sx={{
-                display: "flex",
-                gap: 4,
-                mb: 3,
-                flexWrap: "wrap",
-                justifyContent: "center",
-              }}
-            >
-              <Typography color="success.main" fontWeight={600}>
-                Günlük Satış: {dailySalesTotal.toFixed(2)} TL
-              </Typography>
-              <Typography color="error.main" fontWeight={600}>
-                Günlük Toplam Gider:{" "}
-                {dailyTotalExpensesForCashTracking.toFixed(2)} TL
-              </Typography>
-              <Typography color="primary.main" fontWeight={600}>
-                Günlük Kâr/Zarar: {dailyProfit.toFixed(2)} TL
-              </Typography>
-            </Box>
-
-            {filterMonth && (
-              <Box
-                sx={{
-                  display: "flex",
-                  gap: 4,
-                  mb: 3,
-                  flexWrap: "wrap",
-                  justifyContent: "center",
-                  borderTop: "1px solid #eee",
-                  pt: 2,
-                }}
-              >
-                <Typography variant="subtitle1" fontWeight={700}>
-                  Aylık Özet ({filterMonth})
-                </Typography>
-                <Typography color="success.main" fontWeight={600}>
-                  Aylık Satış: {monthlySalesTotal.toFixed(2)} TL
-                </Typography>
-                <Typography color="error.main" fontWeight={600}>
-                  Aylık Toplam Gider:{" "}
-                  {monthlyTotalExpensesForCashTracking.toFixed(2)} TL
-                </Typography>
-                <Typography color="primary.main" fontWeight={600}>
-                  Aylık Kâr/Zarar: {monthlyProfit.toFixed(2)} TL
-                </Typography>
-              </Box>
-            )}
-
-            <TableContainer>
-              <Table>
-                <TableHead>
-                  <TableRow>
-                    <TableCell>Tip</TableCell>
-                    <TableCell>Açıklama</TableCell>
-                    <TableCell align="right">Tutar</TableCell>
-                    <TableCell align="center">Tarih</TableCell>
-                    <TableCell align="center">Yöntem</TableCell>
-                    <TableCell align="center">İşlemler</TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {filteredTransactions.map((r) => (
-                    <TableRow key={r.id}>
-                      <TableCell>{r.type}</TableCell>
-                      <TableCell>{r.description}</TableCell>
-                      <TableCell align="right">{r.amount.toFixed(2)}</TableCell>
-                      <TableCell align="center">
-                        {safeFormDate(r.date as string | Timestamp | undefined)}
-                      </TableCell>
-                      <TableCell align="center">{r.method}</TableCell>
-                      <TableCell align="center">
-                        {isEditable(
-                          r.date as string | Timestamp | undefined
-                        ) && (
-                          <>
-                            <IconButton
-                              size="small"
-                              onClick={() => handleEdit("transaction", r)}
-                            >
-                              <EditIcon />
-                            </IconButton>
-                            <IconButton
-                              size="small"
-                              onClick={() => {
-                                setDeleteType("transaction");
-                                setDeleteId(r.id);
-                              }}
-                            >
-                              <DeleteIcon color="error" />
-                            </IconButton>
-                          </>
-                        )}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </TableContainer>
-          </>
-        )}
-        {tab === 1 && (
-          <>
-            <Box sx={{ display: "flex", gap: 4, mb: 2 }}>
-              <Typography color="primary.main" fontWeight={600}>
-                Toplam Alış: {supplierTotals.total.toFixed(2)} TL
-              </Typography>
-              <Typography color="success.main" fontWeight={600}>
-                Toplam Ödenen: {supplierTotals.paid.toFixed(2)} TL
-              </Typography>
-              <Typography color="error.main" fontWeight={600}>
-                Kalan Borç: {supplierTotals.debt.toFixed(2)} TL
-              </Typography>
-            </Box>
-
-            <TableContainer>
-              <Table>
-                <TableHead>
-                  <TableRow>
-                    <TableCell>Tarih</TableCell>
-                    <TableCell>Toptancı</TableCell>
-                    <TableCell>Ürün</TableCell>
-                    <TableCell>Adet</TableCell>
-                    <TableCell align="right">Tutar (TL)</TableCell>
-                    <TableCell align="right">Ödenen (TL)</TableCell>
-                    <TableCell align="right">Kalan (TL)</TableCell>
-                    <TableCell align="center">İşlemler</TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {filteredSupplierTransactions.map((r) => (
-                    <TableRow key={r.id}>
-                      <TableCell>
-                        {safeFormDate(r.date as string | Timestamp | undefined)}
-                      </TableCell>
-                      <TableCell>{r.supplierName}</TableCell>
-                      <TableCell>{r.productName}</TableCell>
-                      <TableCell>{r.quantity}</TableCell>
-                      <TableCell align="right">{r.total.toFixed(2)}</TableCell>
-                      <TableCell align="right">{r.paid.toFixed(2)}</TableCell>
-                      <TableCell align="right">
-                        {(r.total - r.paid).toFixed(2)}
-                      </TableCell>
-                      <TableCell align="center">
-                        {isEditable(
-                          r.date as string | Timestamp | undefined
-                        ) && (
-                          <>
-                            <IconButton
-                              size="small"
-                              onClick={() =>
-                                handleEdit("supplierTransaction", r)
-                              }
-                            >
-                              <EditIcon />
-                            </IconButton>
-                            <IconButton
-                              size="small"
-                              onClick={() => {
-                                setDeleteType("supplierTransaction");
-                                setDeleteId(r.id);
-                              }}
-                            >
-                              <DeleteIcon color="error" />
-                            </IconButton>
-                          </>
-                        )}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </TableContainer>
-          </>
-        )}
-        {tab === 2 && (
-          <>
-            <Box sx={{ display: "flex", gap: 4, mb: 2 }}>
-              <Typography color="primary.main" fontWeight={600}>
-                Toplam Döviz Miktarı: {currencyTotals.totalAmount.toFixed(2)}
-              </Typography>
-              <Typography color="success.main" fontWeight={600}>
-                Toplam TL Karşılığı: {currencyTotals.totalTL.toFixed(2)} TL
-              </Typography>
-            </Box>
-
-            <TableContainer>
-              <Table>
-                <TableHead>
-                  <TableRow>
-                    <TableCell>Tarih</TableCell>
-                    <TableCell>Adı</TableCell>
-                    <TableCell>TC</TableCell>
-                    <TableCell>Döviz Tipi</TableCell>
-                    <TableCell align="right">Miktar</TableCell>
-                    <TableCell align="right">Kur</TableCell>
-                    <TableCell align="right">Toplam TL</TableCell>
-                    <TableCell align="center">İşlemler</TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {filteredCurrencyTransactions.map((r) => (
-                    <TableRow key={r.id}>
-                      <TableCell>
-                        {safeFormDate(r.date as string | Timestamp | undefined)}
-                      </TableCell>
-                      <TableCell>{r.name}</TableCell>
-                      <TableCell>{r.tc}</TableCell>
-                      <TableCell>{r.type}</TableCell>
-                      <TableCell align="right">{r.amount.toFixed(2)}</TableCell>
-                      <TableCell align="right">{r.rate.toFixed(4)}</TableCell>
-                      <TableCell align="right">{r.total.toFixed(2)}</TableCell>
-                      <TableCell align="center">
-                        {isEditable(
-                          r.date as string | Timestamp | undefined
-                        ) && (
-                          <>
-                            <IconButton
-                              size="small"
-                              onClick={() =>
-                                handleEdit("currencyTransaction", r)
-                              }
-                            >
-                              <EditIcon />
-                            </IconButton>
-                            <IconButton
-                              size="small"
-                              onClick={() => {
-                                setDeleteType("currencyTransaction");
-                                setDeleteId(r.id as string);
-                              }}
-                            >
-                              <DeleteIcon color="error" />
-                            </IconButton>
-                          </>
-                        )}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </TableContainer>
-          </>
-        )}
-        {tab === 3 && (
-          <Box sx={{ p: 3 }}>
-            <Typography variant="h6" gutterBottom>
-              Kasa Nakit Takibi
-            </Typography>
-
-            <Paper elevation={3} sx={{ p: 3, mb: 3, bgcolor: "#f5f5f5" }}>
-              <Typography variant="subtitle1" fontWeight={600} mb={2}>
-                Gün Başı Nakit Girişi 💰
-              </Typography>
-              <Box sx={{ display: "flex", gap: 2, alignItems: "center" }}>
-                <TextField
-                  label="Gün Başı Nakit Tutar (TL)"
-                  type="number"
-                  fullWidth
-                  value={newInitialCash}
-                  onChange={(e) => setNewInitialCash(e.target.value)}
-                  InputLabelProps={{ shrink: true }}
-                />
-                <Button
-                  variant="contained"
-                  onClick={handleSaveInitialCash}
-                  sx={{ minWidth: 150, height: 56 }}
-                >
-                  Kaydet
-                </Button>
-              </Box>
-              <Typography
-                variant="body1"
-                mt={2}
-                fontWeight={700}
-                color="primary.main"
-              >
-                Mevcut Gün Başı Bakiyesi: {initialCash.toFixed(2)} TL
-              </Typography>
-            </Paper>
-
-            <Paper elevation={3} sx={{ p: 3, mb: 3, bgcolor: "#e8f5e9" }}>
-              <Box
-                sx={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                  mb: 2,
-                }}
-              >
-                <Typography variant="h6" fontWeight={700}>
-                  Günlük Nakit Akış Özeti
-                </Typography>
-                <Button
-                  variant="contained"
-                  color="error"
-                  onClick={handleEndDayInitiate}
-                >
-                  GÜNÜ BİTİR ve KASAYI KAPAT
-                </Button>
-              </Box>
-
-              <Typography variant="body1" color="primary.main" fontWeight={700}>
-                Gün Başı Nakit: {initialCash.toFixed(2)} TL
-              </Typography>
-              <Typography variant="body1" color="success.main" fontWeight={700}>
-                Gün İçi Toplam Nakit Hareketi:{" "}
-                {cashFlowTotals.totalCashMovement.toFixed(2)} TL
-              </Typography>
-              <Typography
-                variant="h5"
-                mt={2}
-                fontWeight={700}
-                color={
-                  cashFlowTotals.finalCashBalance >= 0
-                    ? "success.dark"
-                    : "error.dark"
-                }
-              >
-                Gün Sonu Nakit Bakiyesi:{" "}
-                {cashFlowTotals.finalCashBalance.toFixed(2)} TL
-              </Typography>
-
-              <Box sx={{ mt: 2, pt: 2, borderTop: "1px solid #ddd" }}>
-                <Typography variant="subtitle2" fontWeight={600}>
-                  Nakit Giriş/Çıkış Özeti (Sadece İşlem Sekmesinden)
-                </Typography>
-                <Typography color="success.main">
-                  Nakit Giren (Satış): +{dailySalesTotal.toFixed(2)} TL
-                </Typography>
-                <Typography color="error.main">
-                  Nakit Çıkan (Alış/Gider): -
-                  {dailyTotalExpensesForCashTracking.toFixed(2)} TL
-                </Typography>
-                <Typography variant="caption" display="block">
-                  *Toptancı ve Döviz hareketleri de üstteki 'Toplam Nakit
-                  Hareketi'ne dahildir.
-                </Typography>
-              </Box>
-            </Paper>
-
-            <Typography variant="h6" mt={4} mb={2}>
-              Geçmiş Kasa Kapanışları
-            </Typography>
-            <TableContainer component={Paper}>
-              <Table>
-                <TableHead>
-                  <TableRow>
-                    <TableCell>Tarih</TableCell>
-                    <TableCell align="right">Gün Başı</TableCell>
-                    <TableCell align="right">Nakit Hareketi</TableCell>
-                    <TableCell align="right">Gün Sonu</TableCell>
-                    <TableCell align="center">İşlemler</TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {filteredDailyCashRecords
-                    .sort(
-                      (a, b) =>
-                        new Date(b.date).getTime() - new Date(a.date).getTime()
-                    )
-                    .map((r) => (
-                      <TableRow key={r.id}>
-                        <TableCell>{r.date}</TableCell>
-                        <TableCell align="right">
-                          {r.initialCash.toFixed(2)} TL
-                        </TableCell>
-                        <TableCell align="right">
-                          {r.totalMovement.toFixed(2)} TL
-                        </TableCell>
-                        <TableCell align="right">
-                          {r.finalCash.toFixed(2)} TL
-                        </TableCell>
-                        <TableCell align="center">
-                          <IconButton
-                            size="small"
-                            onClick={() =>
-                              alert(
-                                `Kasa kaydı (${r.date}) için düzenleme karmaşık bir hesaplama gerektirir ve şu an desteklenmemektedir.`
-                              )
-                            }
-                          >
-                            <EditIcon />
-                          </IconButton>
-                          <IconButton
-                            size="small"
-                            onClick={() =>
-                              handleDailyCashRecordDeleteInitiate(r.id)
-                            }
-                          >
-                            <DeleteIcon color="error" />
-                          </IconButton>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                </TableBody>
-              </Table>
-            </TableContainer>
+          >
+            <CircularProgress />
           </Box>
         )}
+
+        <Box sx={{ mt: 1 }}>
+          <Box sx={{ display: "flex", gap: 2, mb: 2, flexWrap: "wrap" }}>
+            <TextField
+              label="Gün Filtrele"
+              type="date"
+              fullWidth
+              InputLabelProps={{ shrink: true }}
+              value={filterDate}
+              onChange={(e) => {
+                setFilterDate(e.target.value);
+                if (e.target.value) setFilterMonth("");
+              }}
+            />
+
+            <TextField
+              label="Ay Filtrele"
+              type="month"
+              fullWidth
+              InputLabelProps={{ shrink: true }}
+              value={filterMonth}
+              onChange={(e) => {
+                setFilterMonth(e.target.value);
+                if (e.target.value) setFilterDate("");
+              }}
+            />
+          </Box>
+
+          <Box sx={{ mb: 2 }}>
+            <TextField
+              label="Ara..."
+              fullWidth
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              sx={{ mt: 1 }}
+            />
+          </Box>
+
+          {tab === 0 && (
+            <>
+              <Box
+                sx={{
+                  display: "flex",
+                  gap: 2,
+                  mb: 2,
+                  flexWrap: "wrap",
+                  justifyContent: "center",
+                }}
+              >
+                <Typography color="success.main" fontWeight={600}>
+                  Günlük Satış: {formatCurrency(dailySalesTotal)}
+                </Typography>
+                <Typography color="error.main" fontWeight={600}>
+                  Günlük Toplam Gider:{" "}
+                  {formatCurrency(dailyTotalExpensesForCashTracking)}
+                </Typography>
+                <Typography color="primary.main" fontWeight={600}>
+                  Günlük Kâr/Zarar: {formatCurrency(dailyProfit)}
+                </Typography>
+              </Box>
+
+              {filterMonth && (
+                <Box
+                  sx={{
+                    display: "flex",
+                    gap: 3,
+                    mb: 2,
+                    flexWrap: "wrap",
+                    justifyContent: "center",
+                    borderTop: "1px solid #eee",
+                    pt: 2,
+                  }}
+                >
+                  <Typography variant="subtitle1" fontWeight={700}>
+                    Aylık Özet ({filterMonth})
+                  </Typography>
+                  <Typography color="success.main" fontWeight={600}>
+                    Aylık Satış: {formatCurrency(monthlySalesTotal)}
+                  </Typography>
+                  <Typography color="error.main" fontWeight={600}>
+                    Aylık Toplam Gider:{" "}
+                    {formatCurrency(monthlyTotalExpensesForCashTracking)}
+                  </Typography>
+                  <Typography color="primary.main" fontWeight={600}>
+                    Aylık Kâr/Zarar: {formatCurrency(monthlyProfit)}
+                  </Typography>
+                </Box>
+              )}
+
+              <Paper variant="outlined" sx={{ overflow: "hidden" }}>
+                <TableContainer sx={{ maxHeight: 360 }}>
+                  <Table size="small" stickyHeader>
+                    <TableHead>
+                      <TableRow>
+                        <TableCell>Tip</TableCell>
+                        <TableCell>Açıklama</TableCell>
+                        <TableCell align="right">Tutar</TableCell>
+                        <TableCell align="center">Tarih</TableCell>
+                        <TableCell align="center">Yöntem</TableCell>
+                        <TableCell align="center">İşlemler</TableCell>
+                      </TableRow>
+                    </TableHead>
+
+                    <TableBody>
+                      {filteredTransactions.length === 0 && (
+                        <TableRow>
+                          <TableCell colSpan={6}>
+                            <EmptyState message="Bu filtreye uygun işlem bulunamadı." />
+                          </TableCell>
+                        </TableRow>
+                      )}
+
+                      {filteredTransactions.map((r) => (
+                        <TableRow
+                          key={r.id}
+                          hover
+                          sx={{ "&:last-child td": { borderBottom: 0 } }}
+                        >
+                          <TableCell sx={{ fontSize: 13 }}>{r.type}</TableCell>
+                          <TableCell sx={{ fontSize: 13 }}>
+                            {r.description}
+                          </TableCell>
+                          <TableCell align="right" sx={{ fontSize: 13 }}>
+                            {formatCurrency(r.amount)}
+                          </TableCell>
+                          <TableCell align="center" sx={{ fontSize: 13 }}>
+                            {smallDate(r.date)}
+                          </TableCell>
+                          <TableCell align="center" sx={{ fontSize: 13 }}>
+                            <Chip label={r.method} size="small" />
+                          </TableCell>
+
+                          <TableCell align="center">
+                            {isEditable(r.date) ? (
+                              <>
+                                <Tooltip title="Düzenle">
+                                  <IconButton
+                                    size="small"
+                                    onClick={() => handleEdit("transaction", r)}
+                                    aria-label="düzenle"
+                                  >
+                                    <EditIcon fontSize="small" />
+                                  </IconButton>
+                                </Tooltip>
+
+                                <Tooltip title="Sil">
+                                  <IconButton
+                                    size="small"
+                                    onClick={() => {
+                                      setDeleteType("transaction");
+                                      setDeleteId(r.id);
+                                    }}
+                                    aria-label="sil"
+                                    color="error"
+                                  >
+                                    <DeleteIcon fontSize="small" />
+                                  </IconButton>
+                                </Tooltip>
+                              </>
+                            ) : (
+                              <Typography
+                                variant="caption"
+                                color="text.secondary"
+                              >
+                                Salt okunur
+                              </Typography>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </TableContainer>
+              </Paper>
+            </>
+          )}
+
+          {tab === 1 && (
+            <>
+              <Box sx={{ display: "flex", gap: 2, mb: 2 }}>
+                <Typography color="primary.main" fontWeight={600}>
+                  Toplam Alış: {formatCurrency(supplierTotals.total)}
+                </Typography>
+                <Typography color="success.main" fontWeight={600}>
+                  Toplam Ödenen: {formatCurrency(supplierTotals.paid)}
+                </Typography>
+                <Typography color="error.main" fontWeight={600}>
+                  Kalan Borç: {formatCurrency(supplierTotals.debt)}
+                </Typography>
+              </Box>
+
+              <Paper variant="outlined" sx={{ overflow: "hidden" }}>
+                <TableContainer sx={{ maxHeight: 360 }}>
+                  <Table size="small" stickyHeader>
+                    <TableHead>
+                      <TableRow>
+                        <TableCell>Tarih</TableCell>
+                        <TableCell>Toptancı</TableCell>
+                        <TableCell>Ürün</TableCell>
+                        <TableCell>Adet</TableCell>
+                        <TableCell align="right">Tutar</TableCell>
+                        <TableCell align="right">Ödenen</TableCell>
+                        <TableCell align="right">Kalan</TableCell>
+                        <TableCell align="center">İşlemler</TableCell>
+                      </TableRow>
+                    </TableHead>
+
+                    <TableBody>
+                      {filteredSupplierTransactions.length === 0 && (
+                        <TableRow>
+                          <TableCell colSpan={8}>
+                            <EmptyState message="Toptancı işlemi bulunamadı." />
+                          </TableCell>
+                        </TableRow>
+                      )}
+
+                      {filteredSupplierTransactions.map((r) => (
+                        <TableRow key={r.id} hover>
+                          <TableCell>{smallDate(r.date)}</TableCell>
+                          <TableCell>{r.supplierName}</TableCell>
+                          <TableCell>{r.productName}</TableCell>
+                          <TableCell>{r.quantity}</TableCell>
+                          <TableCell align="right">
+                            {formatCurrency(r.total)}
+                          </TableCell>
+                          <TableCell align="right">
+                            {formatCurrency(r.paid)}
+                          </TableCell>
+                          <TableCell align="right">
+                            {formatCurrency(r.total - r.paid)}
+                          </TableCell>
+
+                          <TableCell align="center">
+                            {isEditable(r.date) ? (
+                              <>
+                                <Tooltip title="Düzenle">
+                                  <IconButton
+                                    size="small"
+                                    onClick={() =>
+                                      handleEdit("supplierTransaction", r)
+                                    }
+                                  >
+                                    <EditIcon fontSize="small" />
+                                  </IconButton>
+                                </Tooltip>
+
+                                <Tooltip title="Sil">
+                                  <IconButton
+                                    size="small"
+                                    onClick={() => {
+                                      setDeleteType("supplierTransaction");
+                                      setDeleteId(r.id);
+                                    }}
+                                    color="error"
+                                  >
+                                    <DeleteIcon fontSize="small" />
+                                  </IconButton>
+                                </Tooltip>
+                              </>
+                            ) : (
+                              <Typography
+                                variant="caption"
+                                color="text.secondary"
+                              >
+                                Salt okunur
+                              </Typography>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </TableContainer>
+              </Paper>
+            </>
+          )}
+
+          {tab === 2 && (
+            <>
+              <Box sx={{ display: "flex", gap: 2, mb: 2 }}>
+                <Typography color="primary.main" fontWeight={600}>
+                  Toplam Döviz Miktarı: {currencyTotals.totalAmount.toFixed(2)}
+                </Typography>
+                <Typography color="success.main" fontWeight={600}>
+                  Toplam TL Karşılığı: {formatCurrency(currencyTotals.totalTL)}
+                </Typography>
+              </Box>
+
+              <Paper variant="outlined" sx={{ overflow: "hidden" }}>
+                <TableContainer sx={{ maxHeight: 360 }}>
+                  <Table size="small" stickyHeader>
+                    <TableHead>
+                      <TableRow>
+                        <TableCell>Tarih</TableCell>
+                        <TableCell>Adı</TableCell>
+                        <TableCell>TC</TableCell>
+                        <TableCell>Döviz</TableCell>
+                        <TableCell align="right">Miktar</TableCell>
+                        <TableCell align="right">Kur</TableCell>
+                        <TableCell align="right">Toplam TL</TableCell>
+                        <TableCell align="center">İşlemler</TableCell>
+                      </TableRow>
+                    </TableHead>
+
+                    <TableBody>
+                      {filteredCurrencyTransactions.length === 0 && (
+                        <TableRow>
+                          <TableCell colSpan={8}>
+                            <EmptyState message="Döviz işlemi bulunamadı." />
+                          </TableCell>
+                        </TableRow>
+                      )}
+
+                      {filteredCurrencyTransactions.map((r) => (
+                        <TableRow key={r.id} hover>
+                          <TableCell>{smallDate(r.date)}</TableCell>
+                          <TableCell>{r.name}</TableCell>
+                          <TableCell>{r.tc}</TableCell>
+                          <TableCell>{r.type}</TableCell>
+                          <TableCell align="right">
+                            {r.amount.toFixed(2)}
+                          </TableCell>
+                          <TableCell align="right">
+                            {r.rate.toFixed(4)}
+                          </TableCell>
+                          <TableCell align="right">
+                            {formatCurrency(r.total)}
+                          </TableCell>
+
+                          <TableCell align="center">
+                            {isEditable(r.date) ? (
+                              <>
+                                <Tooltip title="Düzenle">
+                                  <IconButton
+                                    size="small"
+                                    onClick={() =>
+                                      handleEdit("currencyTransaction", r)
+                                    }
+                                  >
+                                    <EditIcon fontSize="small" />
+                                  </IconButton>
+                                </Tooltip>
+
+                                <Tooltip title="Sil">
+                                  <IconButton
+                                    size="small"
+                                    onClick={() => {
+                                      setDeleteType("currencyTransaction");
+                                      setDeleteId(r.id as string);
+                                    }}
+                                    color="error"
+                                  >
+                                    <DeleteIcon fontSize="small" />
+                                  </IconButton>
+                                </Tooltip>
+                              </>
+                            ) : (
+                              <Typography
+                                variant="caption"
+                                color="text.secondary"
+                              >
+                                Salt okunur
+                              </Typography>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </TableContainer>
+              </Paper>
+            </>
+          )}
+
+          {tab === 3 && (
+            <Box sx={{ p: 1 }}>
+              <Paper elevation={1} sx={{ p: 2, mb: 2 }}>
+                <Grid container spacing={2} alignItems="center">
+                  <Grid item xs={12} md={8}>
+                    <Typography variant="subtitle1" fontWeight={600}>
+                      Gün Başı Nakit Girişi 💰
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      Bugün için geçerli olan başlangıç nakit tutarını kaydedin.
+                    </Typography>
+
+                    <Box sx={{ mt: 1, display: "flex", gap: 2 }}>
+                      <TextField
+                        label="Gün Başı Nakit (TL)"
+                        type="number"
+                        fullWidth
+                        value={newInitialCash}
+                        onChange={(e) => setNewInitialCash(e.target.value)}
+                        InputLabelProps={{ shrink: true }}
+                        size="small"
+                      />
+
+                      <Button
+                        variant="contained"
+                        onClick={handleSaveInitialCash}
+                        sx={{ minWidth: 140 }}
+                      >
+                        Kaydet
+                      </Button>
+                    </Box>
+                  </Grid>
+
+                  <Grid item xs={12} md={4}>
+                    <Box>
+                      <Typography variant="caption" color="text.secondary">
+                        Mevcut Gün Başı:
+                      </Typography>
+                      <Typography variant="h6" fontWeight={700}>
+                        {formatCurrency(displayedInitialCash)}
+                      </Typography>
+                    </Box>
+                  </Grid>
+                </Grid>
+              </Paper>
+
+              <Paper elevation={1} sx={{ p: 2, mb: 2, bgcolor: "#f1f8f5" }}>
+                <Box
+                  sx={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                  }}
+                >
+                  <Box>
+                    <Typography variant="h6" fontWeight={700}>
+                      Günlük Nakit Akış Özeti
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      Sadece işlemler sekmesinden gelen nakit hareketleri
+                      özetlenir.
+                    </Typography>
+                  </Box>
+
+                  <Button
+                    variant="contained"
+                    color="error"
+                    onClick={handleEndDayInitiate}
+                  >
+                    Günü Bitir & Kapat
+                  </Button>
+                </Box>
+
+                <Divider sx={{ my: 2 }} />
+
+                <Grid container spacing={1}>
+                  <Grid item xs={12} md={4}>
+                    <Typography variant="caption">Gün Başı Nakit</Typography>
+                    <Typography fontWeight={700}>
+                      {formatCurrency(displayedInitialCash)}
+                    </Typography>
+                  </Grid>
+
+                  <Grid item xs={12} md={4}>
+                    <Typography variant="caption">
+                      Gün İçi Toplam Nakit
+                    </Typography>
+                    <Typography color="success.main" fontWeight={700}>
+                      {formatCurrency(displayedTotalMovement)}
+                    </Typography>
+                  </Grid>
+
+                  <Grid item xs={12} md={4}>
+                    <Typography variant="caption">Gün Sonu Nakit</Typography>
+                    <Typography
+                      fontWeight={700}
+                      color={
+                        displayedFinalCash >= 0 ? "success.dark" : "error.dark"
+                      }
+                    >
+                      {formatCurrency(displayedFinalCash)}
+                    </Typography>
+                  </Grid>
+                </Grid>
+              </Paper>
+
+              <Typography variant="h6" mt={2} mb={1}>
+                Geçmiş Kasa Kapanışları
+              </Typography>
+
+              <Paper variant="outlined">
+                <TableContainer sx={{ maxHeight: 360 }}>
+                  <Table size="small" stickyHeader>
+                    <TableHead>
+                      <TableRow>
+                        <TableCell>Tarih</TableCell>
+                        <TableCell align="right">Gün Başı</TableCell>
+                        <TableCell align="right">Nakit Hareketi</TableCell>
+                        <TableCell align="right">Gün Sonu</TableCell>
+                        <TableCell align="center">İşlemler</TableCell>
+                      </TableRow>
+                    </TableHead>
+
+                    <TableBody>
+                      {filteredDailyCashRecords.length === 0 && (
+                        <TableRow>
+                          <TableCell colSpan={5}>
+                            <EmptyState message="Henüz kasa kapanışı kaydı yok." />
+                          </TableCell>
+                        </TableRow>
+                      )}
+
+                      {filteredDailyCashRecords
+                        .sort(
+                          (a, b) =>
+                            new Date(b.date).getTime() -
+                            new Date(a.date).getTime()
+                        )
+                        .map((r) => (
+                          <TableRow key={r.id} hover>
+                            <TableCell>{r.date}</TableCell>
+                            <TableCell align="right">
+                              {formatCurrency(r.initialCash)}
+                            </TableCell>
+                            <TableCell align="right">
+                              {formatCurrency(r.totalMovement)}
+                            </TableCell>
+                            <TableCell align="right">
+                              {formatCurrency(r.finalCash)}
+                            </TableCell>
+
+                            <TableCell align="center">
+                              <Tooltip title="Düzenleme desteklenmiyor">
+                                <span>
+                                  <IconButton size="small" disabled>
+                                    <EditIcon fontSize="small" />
+                                  </IconButton>
+                                </span>
+                              </Tooltip>
+
+                              <Tooltip title="Sil">
+                                <IconButton
+                                  size="small"
+                                  onClick={() =>
+                                    handleDailyCashRecordDeleteInitiate(r.id)
+                                  }
+                                >
+                                  <DeleteIcon fontSize="small" color="error" />
+                                </IconButton>
+                              </Tooltip>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                    </TableBody>
+                  </Table>
+                </TableContainer>
+              </Paper>
+            </Box>
+          )}
+        </Box>
+
+        <DeleteConfirmationDialog
+          open={!!deleteId && !!deleteType}
+          onClose={handleCloseDeleteDialog}
+          onConfirm={handleDelete}
+          type={deleteType}
+        />
+
+        <CriticalConfirmationDialog
+          open={endDayConfirmOpen}
+          onClose={() => setEndDayConfirmOpen(false)}
+          onConfirm={handleEndDay}
+          title="Günü Kapatma Onayı"
+          message={`Gün sonu kasasını kapatmak üzeresiniz. Gün Sonu Bakiyesi ${formatCurrency(
+            cashFlowTotals.finalCashBalance
+          )} olarak kaydedilecek. Onaylıyor musunuz?`}
+          confirmText="Kapat ve Kaydet"
+        />
+
+        <CriticalConfirmationDialog
+          open={!!dailyCashRecordToDeleteId}
+          onClose={() => setDailyCashRecordToDeleteId(null)}
+          onConfirm={handleDeleteDailyCashRecord}
+          title="Kasa Kapanış Kaydı Silme"
+          message="Bu kasa kapanış kaydını silmek, bir sonraki günün günbaşı bakiyesini etkileyebilir ve manuel düzeltme gerektirebilir. Silmek istediğinizden emin misiniz?"
+          confirmText="Kayıdı Sil"
+          isDestructive={true}
+        />
+
+        <Dialog open={!!editId} maxWidth="sm" fullWidth>
+          <DialogTitle>Kayıt Düzenle</DialogTitle>
+          <DialogContent>
+            <Typography variant="body2">
+              Düzenleme formu burada olmalı.
+            </Typography>
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => setEditId(null)}>İptal</Button>
+            <Button onClick={handleUpdate} variant="contained">
+              Kaydet
+            </Button>
+          </DialogActions>
+        </Dialog>
+
+        <Dialog
+          open={endDayModalOpen}
+          onClose={() => setEndDayModalOpen(false)}
+        >
+          <DialogTitle>Kasa Kapanışı Başarılı 🎉</DialogTitle>
+          <DialogContent dividers>
+            <Typography variant="body1" gutterBottom>
+              {endDaySummary.date} tarihi için kasa kapanışı yapıldı.
+            </Typography>
+            <Typography variant="h6" color="success.dark" fontWeight={700}>
+              Gün Sonu Nakit Bakiyesi: {formatCurrency(endDaySummary.finalCash)}
+            </Typography>
+            <Typography variant="body2" sx={{ mt: 1 }}>
+              Bu tutar sistemde günlük kasa kapanışları olarak saklandı.
+            </Typography>
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => setEndDayModalOpen(false)}>Tamam</Button>
+          </DialogActions>
+        </Dialog>
       </Paper>
-
-      <DeleteConfirmationDialog
-        open={!!deleteId && !!deleteType}
-        onClose={handleCloseDeleteDialog}
-        onConfirm={handleDelete}
-        type={deleteType}
-      />
-
-      <CriticalConfirmationDialog
-        open={endDayConfirmOpen}
-        onClose={() => setEndDayConfirmOpen(false)}
-        onConfirm={handleEndDay}
-        title="Günü Kapatma Onayı"
-        message={`Gün sonu kasasını kapatmak üzeresiniz. Gün Sonu Bakiyesi ${cashFlowTotals.finalCashBalance.toFixed(
-          2
-        )} TL olarak kaydedilecek ve bir sonraki günün başlangıç bakiyesi olacaktır. Onaylıyor musunuz?`}
-        confirmText="Kapat ve Kaydet"
-      />
-
-      <CriticalConfirmationDialog
-        open={!!dailyCashRecordToDeleteId}
-        onClose={() => setDailyCashRecordToDeleteId(null)}
-        onConfirm={handleDeleteDailyCashRecord}
-        title="Kasa Kapanış Kaydı Silme"
-        message="Bu kasa kapanış kaydını silmek, bir sonraki günün günbaşı bakiyesini etkileyebilir ve manuel düzeltme gerektirebilir. Silmek istediğinizden emin misiniz?"
-        confirmText="Kayıdı Sil"
-        isDestructive={true}
-      />
-
-      <Dialog open={!!editId}>
-        <DialogTitle>Kayıt Düzenle</DialogTitle>
-        <DialogContent>
-          <Typography>Düzenleme formu burada olmalı.</Typography>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setEditId(null)}>İptal</Button>
-          <Button onClick={handleUpdate} variant="contained">
-            Kaydet
-          </Button>
-        </DialogActions>
-      </Dialog>
-
-      <Dialog open={endDayModalOpen} onClose={() => setEndDayModalOpen(false)}>
-        <DialogTitle>Kasa Kapanışı Başarılı 🎉</DialogTitle>
-        <DialogContent dividers>
-          <Typography variant="body1" gutterBottom>
-            **{endDaySummary.date}** tarihi için kasa kapanışı yapıldı.
-          </Typography>
-          <Typography variant="h6" color="success.dark" fontWeight={700}>
-            Gün Sonu Nakit Bakiyesi: {endDaySummary.finalCash.toFixed(2)} TL
-          </Typography>
-          <Typography variant="body2" sx={{ mt: 1 }}>
-            Bu tutar, bir sonraki günün **Gün Başı Nakit Bakiyesi** olarak
-            ayarlandı.
-          </Typography>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setEndDayModalOpen(false)}>Tamam</Button>
-        </DialogActions>
-      </Dialog>
     </Box>
   );
 };
