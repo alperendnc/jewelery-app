@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo } from "react";
+import React, { useEffect, useState, useMemo, useCallback } from "react";
 import {
   Box,
   Paper,
@@ -33,7 +33,6 @@ import AccountBalanceWalletIcon from "@mui/icons-material/AccountBalanceWallet";
 import TrendingUpIcon from "@mui/icons-material/TrendingUp";
 import {
   useAuth,
-  Transaction,
   SupplierTransaction,
   CurrencyTransaction,
   DailyCashRecord,
@@ -41,7 +40,6 @@ import {
 import formDate from "src/components/formDate";
 import { Timestamp } from "firebase/firestore";
 
-type EditTransactionData = Partial<Omit<Transaction, "id">>;
 type EditSupplierTransactionData = Partial<Omit<SupplierTransaction, "id">>;
 type EditCurrencyTransactionData = Partial<Omit<CurrencyTransaction, "id">>;
 
@@ -164,10 +162,9 @@ const DeleteConfirmationDialog = ({
   open: boolean;
   onClose: () => void;
   onConfirm: () => void;
-  type: "transaction" | "supplierTransaction" | "currencyTransaction" | null;
+  type: "supplierTransaction" | "currencyTransaction" | null;
 }) => {
   const typeMap = {
-    transaction: "Kasa/Finans İşlemi",
     supplierTransaction: "Toptancı İşlemi",
     currencyTransaction: "Döviz İşlemi",
   };
@@ -191,9 +188,6 @@ const TrackingPage = () => {
 
   const [tab, setTab] = useState(0);
   const {
-    getTransactions,
-    updateTransaction,
-    deleteTransaction,
     getSupplierTransactions,
     updateSupplierTransaction,
     deleteSupplierTransaction,
@@ -207,7 +201,6 @@ const TrackingPage = () => {
     deleteDailyCashRecord,
   } = useAuth();
 
-  const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [supplierTransactions, setSupplierTransactions] = useState<
     SupplierTransaction[]
   >([]);
@@ -219,16 +212,14 @@ const TrackingPage = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [editId, setEditId] = useState<string | null>(null);
   const [editType, setEditType] = useState<
-    "transaction" | "supplierTransaction" | "currencyTransaction" | null
+    "supplierTransaction" | "currencyTransaction" | null
   >(null);
   const [editData, setEditData] = useState<
-    | EditTransactionData
-    | EditSupplierTransactionData
-    | EditCurrencyTransactionData
+    EditSupplierTransactionData | EditCurrencyTransactionData
   >({});
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [deleteType, setDeleteType] = useState<
-    "transaction" | "supplierTransaction" | "currencyTransaction" | null
+    "supplierTransaction" | "currencyTransaction" | null
   >(null);
   const [endDayConfirmOpen, setEndDayConfirmOpen] = useState(false);
   const [dailyCashRecordToDeleteId, setDailyCashRecordToDeleteId] = useState<
@@ -253,20 +244,22 @@ const TrackingPage = () => {
     async function fetchData() {
       setLoading(true);
       try {
-        const [
-          fetchedTransactions,
-          fetchedSupplierTransactions,
-          fetchedCurrencyTransactions,
-        ] = await Promise.all([
-          getTransactions(),
-          getSupplierTransactions(),
-          getCurrencyTransactions(),
-        ]);
+        const [fetchedSupplierTransactions, fetchedCurrencyTransactions] =
+          await Promise.all([
+            getSupplierTransactions(),
+            getCurrencyTransactions(),
+          ]);
 
         if (!mounted) return;
-        setTransactions(fetchedTransactions);
         setSupplierTransactions(fetchedSupplierTransactions);
         setCurrencyTransactions(fetchedCurrencyTransactions);
+
+        console.log("🔥 VERİLER YÜKLENDİ:", {
+          supplierTransactions: fetchedSupplierTransactions.length,
+          currencyTransactions: fetchedCurrencyTransactions.length,
+          sampleSupplier: fetchedSupplierTransactions[0],
+          sampleCurrency: fetchedCurrencyTransactions[0],
+        });
 
         const ic = await getInitialCash();
         if (!mounted) return;
@@ -287,59 +280,73 @@ const TrackingPage = () => {
       mounted = false;
     };
   }, [
-    getTransactions,
     getSupplierTransactions,
     getCurrencyTransactions,
     getInitialCash,
     getDailyCashRecords,
   ]);
 
-  const safeFormDate = (date: string | Timestamp | undefined): string => {
-    return formDate(date);
-  };
+  // Basitleştirilmiş ve güvenilir tarih formatlama
+  const safeFormDate = useCallback(
+    (date: string | Timestamp | undefined): string => {
+      if (!date) return "";
 
-  const formatDateToYYYYMM = (date: string | Timestamp | undefined): string => {
-    if (!date) return "";
-    if ((date as any)?.toDate instanceof Function) {
-      const d = (date as any).toDate() as Date;
-      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-    }
-    if (typeof date === "string") {
-      if (/^\d{4}-\d{2}-\d{2}/.test(date)) {
-        return date.slice(0, 7);
+      try {
+        // Timestamp ise
+        if ((date as any)?.toDate instanceof Function) {
+          const d = (date as any).toDate() as Date;
+          return d.toISOString().split("T")[0];
+        }
+
+        // String ise
+        if (typeof date === "string") {
+          // YYYY-MM-DD formatında mı?
+          if (/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+            return date;
+          }
+
+          // DD-MM-YYYY formatında mı?
+          const ddMMyyyyMatch = date.match(/^(\d{2})-(\d{2})-(\d{4})$/);
+          if (ddMMyyyyMatch) {
+            const [, day, month, year] = ddMMyyyyMatch;
+            return `${year}-${month}-${day}`;
+          }
+
+          // Diğer formatlar için Date parse dene
+          const parsed = new Date(date);
+          if (!isNaN(parsed.getTime())) {
+            return parsed.toISOString().split("T")[0];
+          }
+        }
+
+        // Fallback
+        return formDate(date) || "";
+      } catch (error) {
+        console.error("Tarih formatlama hatası:", error, date);
+        return "";
       }
-      const m = date.match(/^(\d{2})-(\d{2})-(\d{4})$/);
-      if (m) {
-        const day = m[1];
-        const month = m[2];
-        const year = m[3];
-        return `${year}-${month}`;
-      }
-      const parsed = Date.parse(date);
-      if (!isNaN(parsed)) {
-        const d = new Date(parsed);
-        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(
-          2,
-          "0"
-        )}`;
-      }
-    }
-    return "";
-  };
+    },
+    []
+  );
+
+  const formatDateToYYYYMM = useCallback(
+    (date: string | Timestamp | undefined): string => {
+      const fullDate = safeFormDate(date);
+      return fullDate.substring(0, 7); // YYYY-MM
+    },
+    [safeFormDate]
+  );
 
   const isEditable = (date: string | Timestamp | undefined): boolean => {
     if (!date) return false;
-
     const recordDateString = safeFormDate(date);
     const recordDateTime = new Date(recordDateString).getTime();
-
     const now = new Date();
     const todayStart = new Date(
       now.getFullYear(),
       now.getMonth(),
       now.getDate()
     ).getTime();
-
     return recordDateTime >= todayStart;
   };
 
@@ -360,103 +367,73 @@ const TrackingPage = () => {
     }
   };
 
-  const filteredTransactions = useMemo(() => {
-    const lowerCaseQuery = searchQuery.toLowerCase();
-    const filterValue = filterDate || filterMonth;
-
-    return transactions.filter((t) => {
-      const transactionDate = safeFormDate(
-        t.date as string | Timestamp | undefined
-      );
-      const transactionYYYYMM = formatDateToYYYYMM(
-        t.date as string | Timestamp | undefined
-      );
-
-      let matchesDateOrMonth = true;
-      if (filterValue) {
-        if (filterDate) {
-          matchesDateOrMonth = transactionDate === filterValue;
-        } else if (filterMonth) {
-          matchesDateOrMonth = transactionYYYYMM === filterValue;
-        }
-      }
-
-      const matchesSearch =
-        t.description.toLowerCase().includes(lowerCaseQuery) ||
-        t.type.toLowerCase().includes(lowerCaseQuery) ||
-        t.amount.toString().includes(lowerCaseQuery) ||
-        t.method.toLowerCase().includes(lowerCaseQuery);
-
-      return matchesDateOrMonth && matchesSearch;
-    });
-  }, [transactions, filterDate, filterMonth, searchQuery]);
-
   const filteredSupplierTransactions = useMemo(() => {
-    const lowerCaseQuery = searchQuery.toLowerCase();
-    const filterValue = filterDate || filterMonth;
+    let filtered = [...supplierTransactions];
 
-    return supplierTransactions.filter((s) => {
-      const transactionDate = safeFormDate(
-        s.date as string | Timestamp | undefined
+    if (filterDate) {
+      filtered = filtered.filter((s) => safeFormDate(s.date) === filterDate);
+    } else if (filterMonth) {
+      filtered = filtered.filter(
+        (s) => formatDateToYYYYMM(s.date) === filterMonth
       );
-      const transactionYYYYMM = formatDateToYYYYMM(
-        s.date as string | Timestamp | undefined
+    }
+
+    if (searchQuery) {
+      const query = searchQuery.toLowerCase();
+      filtered = filtered.filter(
+        (s) =>
+          s.supplierName.toLowerCase().includes(query) ||
+          s.productName.toLowerCase().includes(query) ||
+          s.quantity.toString().includes(query) ||
+          s.total.toString().includes(query) ||
+          s.paid.toString().includes(query) ||
+          (s.paymentMethod && s.paymentMethod.toLowerCase().includes(query))
       );
+    }
 
-      let matchesDateOrMonth = true;
-      if (filterValue) {
-        if (filterDate) {
-          matchesDateOrMonth = transactionDate === filterValue;
-        } else if (filterMonth) {
-          matchesDateOrMonth = transactionYYYYMM === filterValue;
-        }
-      }
-
-      const matchesSearch =
-        s.supplierName.toLowerCase().includes(lowerCaseQuery) ||
-        s.productName.toLowerCase().includes(lowerCaseQuery) ||
-        s.quantity.toString().includes(lowerCaseQuery) ||
-        s.total.toString().includes(lowerCaseQuery) ||
-        s.paid.toString().includes(lowerCaseQuery) ||
-        (s.paymentMethod &&
-          s.paymentMethod.toLowerCase().includes(lowerCaseQuery));
-
-      return matchesDateOrMonth && matchesSearch;
-    });
-  }, [supplierTransactions, filterDate, filterMonth, searchQuery]);
+    return filtered;
+  }, [
+    supplierTransactions,
+    filterDate,
+    filterMonth,
+    searchQuery,
+    safeFormDate,
+    formatDateToYYYYMM,
+  ]);
 
   const filteredCurrencyTransactions = useMemo(() => {
-    const lowerCaseQuery = searchQuery.toLowerCase();
-    const filterValue = filterDate || filterMonth;
+    let filtered = [...currencyTransactions];
 
-    return currencyTransactions.filter((c) => {
-      const transactionDate = safeFormDate(
-        c.date as string | Timestamp | undefined
+    if (filterDate) {
+      filtered = filtered.filter((c) => safeFormDate(c.date) === filterDate);
+    } else if (filterMonth) {
+      filtered = filtered.filter(
+        (c) => formatDateToYYYYMM(c.date) === filterMonth
       );
-      const transactionYYYYMM = formatDateToYYYYMM(
-        c.date as string | Timestamp | undefined
+    }
+
+    if (searchQuery) {
+      const query = searchQuery.toLowerCase();
+      filtered = filtered.filter(
+        (c) =>
+          c.name.toLowerCase().includes(query) ||
+          c.tc.toLowerCase().includes(query) ||
+          c.type.toLowerCase().includes(query) ||
+          c.amount.toString().includes(query) ||
+          c.rate.toString().includes(query) ||
+          c.total.toString().includes(query)
       );
+    }
 
-      let matchesDateOrMonth = true;
-      if (filterValue) {
-        if (filterDate) {
-          matchesDateOrMonth = transactionDate === filterValue;
-        } else if (filterMonth) {
-          matchesDateOrMonth = transactionYYYYMM === filterValue;
-        }
-      }
-
-      const matchesSearch =
-        c.name.toLowerCase().includes(lowerCaseQuery) ||
-        c.tc.toLowerCase().includes(lowerCaseQuery) ||
-        c.type.toLowerCase().includes(lowerCaseQuery) ||
-        c.amount.toString().includes(lowerCaseQuery) ||
-        c.rate.toString().includes(lowerCaseQuery) ||
-        c.total.toString().includes(lowerCaseQuery);
-
-      return matchesDateOrMonth && matchesSearch;
-    });
-  }, [currencyTransactions, filterDate, filterMonth, searchQuery]);
+    return filtered;
+  }, [
+    currencyTransactions,
+    filterDate,
+    filterMonth,
+    searchQuery,
+    safeFormDate,
+    formatDateToYYYYMM,
+  ]);
 
   const filteredDailyCashRecords = useMemo(() => {
     const filterValue = filterDate || filterMonth;
@@ -468,56 +445,6 @@ const TrackingPage = () => {
       return true;
     });
   }, [dailyCashRecords, filterDate, filterMonth]);
-
-  const dailySalesTotal = useMemo(
-    () =>
-      filteredTransactions
-        .filter((t) => t.type === "Satış")
-        .reduce((sum, t) => sum + t.amount, 0),
-    [filteredTransactions]
-  );
-
-  const dailyTotalExpensesForCashTracking = useMemo(
-    () =>
-      filteredTransactions
-        .filter((t) => t.type === "Alış")
-        .reduce((sum, t) => sum + t.amount, 0),
-    [filteredTransactions]
-  );
-
-  const dailyProfit = useMemo(
-    () => dailySalesTotal - dailyTotalExpensesForCashTracking,
-    [dailySalesTotal, dailyTotalExpensesForCashTracking]
-  );
-
-  const monthlySalesTotal = useMemo(() => {
-    if (!filterMonth) return 0;
-    return transactions
-      .filter(
-        (t) =>
-          formatDateToYYYYMM(t.date as string | Timestamp | undefined) ===
-          filterMonth
-      )
-      .filter((t) => t.type === "Satış")
-      .reduce((sum, t) => sum + t.amount, 0);
-  }, [transactions, filterMonth]);
-
-  const monthlyTotalExpensesForCashTracking = useMemo(() => {
-    if (!filterMonth) return 0;
-    return transactions
-      .filter(
-        (t) =>
-          formatDateToYYYYMM(t.date as string | Timestamp | undefined) ===
-          filterMonth
-      )
-      .filter((t) => t.type === "Alış")
-      .reduce((sum, t) => sum + t.amount, 0);
-  }, [transactions, filterMonth]);
-
-  const monthlyProfit = useMemo(
-    () => monthlySalesTotal - monthlyTotalExpensesForCashTracking,
-    [monthlySalesTotal, monthlyTotalExpensesForCashTracking]
-  );
 
   const supplierTotals = useMemo(() => {
     const total = filteredSupplierTransactions.reduce(
@@ -544,14 +471,6 @@ const TrackingPage = () => {
   }, [filteredCurrencyTransactions]);
 
   const cashFlowTotals = useMemo(() => {
-    const transactionsCashTotal = filteredTransactions.reduce((sum, t) => {
-      if (t.method === "Nakit") {
-        if (t.type === "Satış") return sum + t.amount;
-        if (t.type === "Alış") return sum - t.amount;
-      }
-      return sum;
-    }, 0);
-
     const supplierCashTotal = filteredSupplierTransactions.reduce((sum, s) => {
       if (s.paymentMethod === "Nakit") return sum - s.paid;
       return sum;
@@ -563,20 +482,14 @@ const TrackingPage = () => {
       return sum;
     }, 0);
 
-    const totalCashMovement =
-      transactionsCashTotal + supplierCashTotal + currencyCashTotal;
+    const totalCashMovement = supplierCashTotal + currencyCashTotal;
     const finalCashBalance = initialCash + totalCashMovement;
 
     return {
       totalCashMovement,
       finalCashBalance,
     };
-  }, [
-    filteredTransactions,
-    filteredSupplierTransactions,
-    filteredCurrencyTransactions,
-    initialCash,
-  ]);
+  }, [filteredSupplierTransactions, filteredCurrencyTransactions, initialCash]);
 
   const displayedInitialCash = resetBalances ? 0 : initialCash;
   const displayedTotalMovement = resetBalances
@@ -587,7 +500,7 @@ const TrackingPage = () => {
     : cashFlowTotals.finalCashBalance;
 
   const handleEdit = (
-    type: "transaction" | "supplierTransaction" | "currencyTransaction",
+    type: "supplierTransaction" | "currencyTransaction",
     data: any
   ) => {
     setEditType(type);
@@ -599,10 +512,7 @@ const TrackingPage = () => {
     if (!editId || !editType) return;
 
     try {
-      if (editType === "transaction") {
-        await updateTransaction(editId, editData as Omit<Transaction, "id">);
-        setTransactions(await getTransactions());
-      } else if (editType === "supplierTransaction") {
+      if (editType === "supplierTransaction") {
         await updateSupplierTransaction(
           editId,
           editData as Omit<SupplierTransaction, "id">
@@ -676,10 +586,7 @@ const TrackingPage = () => {
     if (!deleteId || !deleteType) return;
 
     try {
-      if (deleteType === "transaction") {
-        await deleteTransaction(deleteId);
-        setTransactions(await getTransactions());
-      } else if (deleteType === "supplierTransaction") {
+      if (deleteType === "supplierTransaction") {
         await deleteSupplierTransaction(deleteId);
         setSupplierTransactions(await getSupplierTransactions());
       } else if (deleteType === "currencyTransaction") {
@@ -774,7 +681,7 @@ const TrackingPage = () => {
                 value={formatCurrency(displayedTotalMovement)}
                 color="success"
                 icon={<TrendingUpIcon />}
-                caption={`Satış/Gider özetine göre`}
+                caption={`Toptancı/Döviz özetine göre`}
               />
             </Grid>
 
@@ -792,12 +699,14 @@ const TrackingPage = () => {
 
         <Tabs
           value={tab}
-          onChange={(_, v) => setTab(v)}
+          onChange={(_, v) => {
+            console.log("📑 Tab değişti:", v);
+            setTab(v);
+          }}
           centered
           sx={{ mb: 2 }}
           variant="fullWidth"
         >
-          <Tab label="İşlemler" />
           <Tab label="Toptancı" />
           <Tab label="Döviz" />
           <Tab label="Kasa" />
@@ -831,6 +740,7 @@ const TrackingPage = () => {
               InputLabelProps={{ shrink: true }}
               value={filterDate}
               onChange={(e) => {
+                console.log("📅 Gün filtresi değişti:", e.target.value);
                 setFilterDate(e.target.value);
                 if (e.target.value) setFilterMonth("");
               }}
@@ -843,6 +753,7 @@ const TrackingPage = () => {
               InputLabelProps={{ shrink: true }}
               value={filterMonth}
               onChange={(e) => {
+                console.log("📅 Ay filtresi değişti:", e.target.value);
                 setFilterMonth(e.target.value);
                 if (e.target.value) setFilterDate("");
               }}
@@ -854,151 +765,15 @@ const TrackingPage = () => {
               label="Ara..."
               fullWidth
               value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+              onChange={(e) => {
+                console.log("🔍 Arama değişti:", e.target.value);
+                setSearchQuery(e.target.value);
+              }}
               sx={{ mt: 1 }}
             />
           </Box>
 
           {tab === 0 && (
-            <>
-              <Box
-                sx={{
-                  display: "flex",
-                  gap: 2,
-                  mb: 2,
-                  flexWrap: "wrap",
-                  justifyContent: "center",
-                }}
-              >
-                <Typography color="success.main" fontWeight={600}>
-                  Günlük Satış: {formatCurrency(dailySalesTotal)}
-                </Typography>
-                <Typography color="error.main" fontWeight={600}>
-                  Günlük Toplam Gider:{" "}
-                  {formatCurrency(dailyTotalExpensesForCashTracking)}
-                </Typography>
-                <Typography color="primary.main" fontWeight={600}>
-                  Günlük Kâr/Zarar: {formatCurrency(dailyProfit)}
-                </Typography>
-              </Box>
-
-              {filterMonth && (
-                <Box
-                  sx={{
-                    display: "flex",
-                    gap: 3,
-                    mb: 2,
-                    flexWrap: "wrap",
-                    justifyContent: "center",
-                    borderTop: "1px solid #eee",
-                    pt: 2,
-                  }}
-                >
-                  <Typography variant="subtitle1" fontWeight={700}>
-                    Aylık Özet ({filterMonth})
-                  </Typography>
-                  <Typography color="success.main" fontWeight={600}>
-                    Aylık Satış: {formatCurrency(monthlySalesTotal)}
-                  </Typography>
-                  <Typography color="error.main" fontWeight={600}>
-                    Aylık Toplam Gider:{" "}
-                    {formatCurrency(monthlyTotalExpensesForCashTracking)}
-                  </Typography>
-                  <Typography color="primary.main" fontWeight={600}>
-                    Aylık Kâr/Zarar: {formatCurrency(monthlyProfit)}
-                  </Typography>
-                </Box>
-              )}
-
-              <Paper variant="outlined" sx={{ overflow: "hidden" }}>
-                <TableContainer sx={{ maxHeight: 360 }}>
-                  <Table size="small" stickyHeader>
-                    <TableHead>
-                      <TableRow>
-                        <TableCell>Tip</TableCell>
-                        <TableCell>Açıklama</TableCell>
-                        <TableCell align="right">Tutar</TableCell>
-                        <TableCell align="center">Tarih</TableCell>
-                        <TableCell align="center">Yöntem</TableCell>
-                        <TableCell align="center">İşlemler</TableCell>
-                      </TableRow>
-                    </TableHead>
-
-                    <TableBody>
-                      {filteredTransactions.length === 0 && (
-                        <TableRow>
-                          <TableCell colSpan={6}>
-                            <EmptyState message="Bu filtreye uygun işlem bulunamadı." />
-                          </TableCell>
-                        </TableRow>
-                      )}
-
-                      {filteredTransactions.map((r) => (
-                        <TableRow
-                          key={r.id}
-                          hover
-                          sx={{ "&:last-child td": { borderBottom: 0 } }}
-                        >
-                          <TableCell sx={{ fontSize: 13 }}>{r.type}</TableCell>
-                          <TableCell sx={{ fontSize: 13 }}>
-                            {r.description}
-                          </TableCell>
-                          <TableCell align="right" sx={{ fontSize: 13 }}>
-                            {formatCurrency(r.amount)}
-                          </TableCell>
-                          <TableCell align="center" sx={{ fontSize: 13 }}>
-                            {smallDate(r.date)}
-                          </TableCell>
-                          <TableCell align="center" sx={{ fontSize: 13 }}>
-                            <Chip label={r.method} size="small" />
-                          </TableCell>
-
-                          <TableCell align="center">
-                            {isEditable(r.date) ? (
-                              <>
-                                <Tooltip title="Düzenle">
-                                  <IconButton
-                                    size="small"
-                                    onClick={() => handleEdit("transaction", r)}
-                                    aria-label="düzenle"
-                                  >
-                                    <EditIcon fontSize="small" />
-                                  </IconButton>
-                                </Tooltip>
-
-                                <Tooltip title="Sil">
-                                  <IconButton
-                                    size="small"
-                                    onClick={() => {
-                                      setDeleteType("transaction");
-                                      setDeleteId(r.id);
-                                    }}
-                                    aria-label="sil"
-                                    color="error"
-                                  >
-                                    <DeleteIcon fontSize="small" />
-                                  </IconButton>
-                                </Tooltip>
-                              </>
-                            ) : (
-                              <Typography
-                                variant="caption"
-                                color="text.secondary"
-                              >
-                                Salt okunur
-                              </Typography>
-                            )}
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </TableContainer>
-              </Paper>
-            </>
-          )}
-
-          {tab === 1 && (
             <>
               <Box sx={{ display: "flex", gap: 2, mb: 2 }}>
                 <Typography color="primary.main" fontWeight={600}>
@@ -1098,7 +873,7 @@ const TrackingPage = () => {
             </>
           )}
 
-          {tab === 2 && (
+          {tab === 1 && (
             <>
               <Box sx={{ display: "flex", gap: 2, mb: 2 }}>
                 <Typography color="primary.main" fontWeight={600}>
@@ -1195,7 +970,7 @@ const TrackingPage = () => {
             </>
           )}
 
-          {tab === 3 && (
+          {tab === 2 && (
             <Box sx={{ p: 1 }}>
               <Paper elevation={1} sx={{ p: 2, mb: 2 }}>
                 <Grid container spacing={2} alignItems="center">
@@ -1254,7 +1029,7 @@ const TrackingPage = () => {
                       Günlük Nakit Akış Özeti
                     </Typography>
                     <Typography variant="body2" color="text.secondary">
-                      Sadece işlemler sekmesinden gelen nakit hareketleri
+                      Toptancı ve döviz işlemlerinden gelen nakit hareketleri
                       özetlenir.
                     </Typography>
                   </Box>
