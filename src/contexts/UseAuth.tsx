@@ -116,6 +116,13 @@ export interface DailyCashRecord {
   totalMovement: number;
 }
 
+export interface CashBalance {
+  id?: string;
+  balance: number;
+  lastUpdated: Date;
+  description?: string;
+}
+
 interface AuthContextType {
   addProduct: (product: Omit<Product, "id" | "createdAt">) => Promise<void>;
   getProducts: () => Promise<Product[]>;
@@ -175,6 +182,15 @@ interface AuthContextType {
   getDailyCashRecords: () => Promise<DailyCashRecord[]>;
   addOrUpdateDailyCashRecord: (record: DailyCashRecord) => Promise<void>;
   deleteDailyCashRecord: (id: string) => Promise<void>;
+
+  getCashBalance: () => Promise<number>;
+  updateCashBalance: (newBalance: number, description: string) => Promise<void>;
+  addToCashBalance: (amount: number, description: string) => Promise<void>;
+  subtractFromCashBalance: (
+    amount: number,
+    description: string
+  ) => Promise<void>;
+  getCashBalanceHistory: () => Promise<CashBalance[]>;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -252,6 +268,114 @@ export function AuthProvider({ children }: AuthProviderProps) {
     return `${day}-${month}-${year}`;
   };
 
+  const cashBalanceDocRefForUser = (uid: string) => doc(db, "cashBalance", uid);
+
+  const cashBalanceHistoryCollectionForUser = (uid: string) =>
+    collection(db, "cashBalance", uid, "history");
+
+  const getCashBalance = async (): Promise<number> => {
+    const uid = auth.currentUser?.uid || currentUser?.uid;
+    if (!uid) return 0;
+
+    try {
+      const snap = await getDoc(cashBalanceDocRefForUser(uid));
+      if (!snap.exists()) {
+        await setDoc(cashBalanceDocRefForUser(uid), {
+          balance: 0,
+          lastUpdated: new Date(),
+        });
+        return 0;
+      }
+      const data = snap.data();
+      return typeof data?.balance === "number" ? data.balance : 0;
+    } catch (err) {
+      console.error("getCashBalance error:", err);
+      return 0;
+    }
+  };
+
+  const updateCashBalance = async (newBalance: number, description: string) => {
+    const uid = auth.currentUser?.uid || currentUser?.uid;
+    if (!uid) throw new Error("Kullanıcı giriş yapmamış.");
+
+    try {
+      await setDoc(
+        cashBalanceDocRefForUser(uid),
+        {
+          balance: newBalance,
+          lastUpdated: new Date(),
+        },
+        { merge: true }
+      );
+
+      await addDoc(cashBalanceHistoryCollectionForUser(uid), {
+        balance: newBalance,
+        description: description,
+        timestamp: new Date(),
+      });
+
+      console.log(
+        `💰 Kasa güncellendi: ${formatCurrency(newBalance)} - ${description}`
+      );
+    } catch (err) {
+      console.error("updateCashBalance error:", err);
+      throw err;
+    }
+  };
+
+  const addToCashBalance = async (amount: number, description: string) => {
+    if (amount <= 0) throw new Error("Geçersiz miktar");
+
+    const currentBalance = await getCashBalance();
+    const newBalance = currentBalance + amount;
+    await updateCashBalance(
+      newBalance,
+      `${description} (+${formatCurrency(amount)})`
+    );
+  };
+
+  const subtractFromCashBalance = async (
+    amount: number,
+    description: string
+  ) => {
+    if (amount <= 0) throw new Error("Geçersiz miktar");
+
+    const currentBalance = await getCashBalance();
+    const newBalance = currentBalance - amount;
+    await updateCashBalance(
+      newBalance,
+      `${description} (-${formatCurrency(amount)})`
+    );
+  };
+
+  const getCashBalanceHistory = async (): Promise<CashBalance[]> => {
+    const uid = auth.currentUser?.uid || currentUser?.uid;
+    if (!uid) return [];
+
+    try {
+      const qSnap = await getDocs(cashBalanceHistoryCollectionForUser(uid));
+      return qSnap.docs
+        .map((d) => ({
+          id: d.id,
+          ...(d.data() as Omit<CashBalance, "id">),
+        }))
+        .sort(
+          (a, b) =>
+            new Date(b.lastUpdated).getTime() -
+            new Date(a.lastUpdated).getTime()
+        );
+    } catch (err) {
+      console.error("getCashBalanceHistory error:", err);
+      return [];
+    }
+  };
+
+  const formatCurrency = (n: number) =>
+    n.toLocaleString("tr-TR", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }) + " TL";
+
   const addProduct = async (product: Omit<Product, "id" | "createdAt">) => {
     await addDoc(collection(db, "products"), {
       ...product,
@@ -269,6 +393,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       paymentMethod: transaction.paymentMethod || "Nakit",
     });
   };
+
   const getSupplierTransactions = async (): Promise<SupplierTransaction[]> => {
     const querySnapshot = await getDocs(collection(db, "supplierTransactions"));
     return querySnapshot.docs.map((doc) => {
@@ -284,6 +409,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const deleteSupplierTransaction = async (id: string) => {
     await deleteDoc(doc(db, "supplierTransactions", id));
   };
+
   const updateSupplierTransaction = async (
     id: string,
     updatedFields: Partial<SupplierTransaction>
@@ -332,6 +458,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       createdAt: new Date(),
     });
   };
+
   const getCustomers = async (): Promise<Customer[]> => {
     const querySnapshot = await getDocs(collection(db, "customers"));
     return querySnapshot.docs.map((doc) => ({
@@ -379,6 +506,10 @@ export function AuthProvider({ children }: AuthProviderProps) {
       date: standardizedDate,
       method: sale.paymentMethod || "Nakit",
     });
+
+    if (sale.paymentMethod === "Nakit") {
+      await addToCashBalance(sale.total, `${sale.productName} satışı`);
+    }
 
     if (sale.customerId || sale.customer) {
       let customerDocRef;
@@ -457,6 +588,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const deleteSale = async (id: string) => {
     await deleteDoc(doc(db, "sales", id));
   };
+
   const updateSale = async (id: string, updatedFields: Partial<Sale>) => {
     const ref = doc(db, "sales", id);
     if (updatedFields.date) {
@@ -551,6 +683,13 @@ export function AuthProvider({ children }: AuthProviderProps) {
       method: purchase.paymentMethod || "Nakit",
     });
 
+    if (purchase.paymentMethod === "Nakit") {
+      await subtractFromCashBalance(
+        purchase.paid,
+        `${purchase.productName} alışı`
+      );
+    }
+
     if (purchase.customerId || purchase.customer) {
       let customerDocRef;
       let currentCustomerData;
@@ -622,6 +761,18 @@ export function AuthProvider({ children }: AuthProviderProps) {
       ...transaction,
       date: formatDateToDB(transaction.date),
     });
+
+    if (transaction.type === "Satış") {
+      await addToCashBalance(
+        transaction.total,
+        `Döviz satışı - ${transaction.name}`
+      );
+    } else if (transaction.type === "Alış") {
+      await subtractFromCashBalance(
+        transaction.total,
+        `Döviz alışı - ${transaction.name}`
+      );
+    }
   };
 
   const getCurrencyTransactions = async (): Promise<CurrencyTransaction[]> => {
@@ -635,9 +786,11 @@ export function AuthProvider({ children }: AuthProviderProps) {
       };
     });
   };
+
   const deleteCurrencyTransaction = async (id: string) => {
     await deleteDoc(doc(db, "currencyTransactions", id));
   };
+
   const updateCurrencyTransaction = async (
     id: string,
     updatedFields: Partial<CurrencyTransaction>
@@ -679,6 +832,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
         },
         { merge: true }
       );
+
+      await updateCashBalance(value, "Gün başı nakit girişi");
     } catch (err) {
       console.error("setInitialCash error:", err);
       throw err;
@@ -778,6 +933,12 @@ export function AuthProvider({ children }: AuthProviderProps) {
         getDailyCashRecords,
         addOrUpdateDailyCashRecord,
         deleteDailyCashRecord,
+
+        getCashBalance,
+        updateCashBalance,
+        addToCashBalance,
+        subtractFromCashBalance,
+        getCashBalanceHistory,
       }}
     >
       {!loading && children}
